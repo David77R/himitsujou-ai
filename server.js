@@ -33,7 +33,8 @@ const gemini = createGemini({
 
 const ollama = createOllama({
   url: env('OLLAMA_URL', 'http://127.0.0.1:11434').replace(/\/+$/, ''),
-  model: env('OLLAMA_MODEL', 'llama3.1:8b')
+  model: env('OLLAMA_MODEL', 'llama3.1:8b'),
+  numCtx: Number(env('OLLAMA_NUM_CTX', 12288))
 });
 
 const comfy = createComfy({
@@ -121,7 +122,30 @@ const CHARACTER_SHEET = [
 const ENHANCERS = {
   character: CHARACTER_SHEET,
   summary: 'Resume en tres o cuatro frases lo que ocurre en este capítulo: hechos, decisiones y lo que cambia entre los personajes. Sin valoraciones ni adornos. Responde solo con el resumen, en el idioma del capítulo.',
-  scene: 'From the scene you receive, write an image prompt for an anime diffusion model. Reply with exactly two lines and nothing else. First line: "POSITIVO:" followed by comma-separated Danbooru-style tags for the most visual moment — subject count tag (1girl, 1boy, 2girls, 1other, no humans), appearance, clothing, pose, action, setting, lighting and composition. Second line: "NEGATIVO:" followed by comma-separated tags naming what must not appear in that image. Use short tags, never sentences.',
+  state: [
+    'Recibes el estado anterior de una historia y su capítulo más reciente. Devuelve el estado actualizado, en el idioma de la historia, en texto plano y sin markdown.',
+    'Usa exactamente estas cuatro líneas, cada una empezando por su nombre:',
+    'Personajes: nombre y, entre paréntesis, quién es y cómo está ahora. Separa con punto y coma.',
+    'Lugar: dónde transcurre el final del capítulo.',
+    'Momento: en qué punto temporal queda la historia.',
+    'Hilos abiertos: lo que quedó sin resolver y debería volver. Separa con punto y coma.',
+    'Conserva todo lo del estado anterior que siga siendo cierto y corrige solo lo que el capítulo haya cambiado. No inventes nada que no esté en el texto.'
+  ].join(' '),
+  suggestions: [
+    'Recibes el estado de una historia y el final de su último capítulo.',
+    'Propón tres continuaciones distintas para el siguiente capítulo, en el idioma de la historia.',
+    'Cada una en una sola línea, de entre diez y veinte palabras, empezando por un verbo y diciendo qué pasa, no cómo se cuenta.',
+    'Que sean de verdad diferentes entre sí: una que siga el hilo más obvio, una que lo complique y una que cambie de escenario o de personaje.',
+    'Responde solo con las tres líneas, sin numerarlas ni añadir nada más.'
+  ].join(' '),
+  scene: [
+    'From the scene you receive, write an image prompt for an anime diffusion model.',
+    'Pick the single most striking visual moment of the scene, not a summary of it.',
+    'Reply with exactly two lines and nothing else.',
+    'First line: "POSITIVO:" followed by 15 to 25 comma-separated Danbooru-style tags, in this order: subject count tag (1girl, 1boy, 2girls, 1other, no humans), age tag (adult, mature) when there are people, hair, eyes, clothing, facial expression, pose and action, setting, time of day, weather, lighting (for example dim lighting, backlighting, candlelight), mood, camera framing (for example upper body, wide shot, from below), and finally detailed background.',
+    'Second line: "NEGATIVO:" followed by comma-separated tags for what must not appear, always including anything the scene rules out.',
+    'Use short English tags, never sentences, and never name a real or copyrighted character.'
+  ].join(' '),
   imageTags: 'Rewrite the user idea as Danbooru-style tags for an anime image diffusion model, separated by commas. Start with the subject count tag (1girl, 1boy, 2girls, 1other or no humans), then appearance, clothing, pose, action, setting, lighting, composition and art style. Use short tags, not sentences. Keep every element the user asked for and do not add or remove content. Reply with the tags only.',
   image: 'Rewrite the user idea as one English prompt for an image diffusion model: comma-separated, concrete visual details (subject, setting, lighting, style, composition, quality). Keep every element the user asked for and do not add or remove content. Reply with the prompt only.',
   video: 'Rewrite the user idea as one English paragraph for a video diffusion model, describing the subject, its motion, camera movement, setting, lighting and style. Keep every element the user asked for and do not add or remove content. Reply with the prompt only.'
@@ -238,11 +262,17 @@ function chapterPrompt(story, instruction, length) {
   if (story.character) parts.push(`Protagonista:\n${story.character}`);
   if (story.tags) parts.push(`Etiquetas que definen el tono, el género y el mundo: ${story.tags}`);
   if (story.chapters.length) {
+    if (story.state) parts.push(`Estado de la historia. Respétalo al pie de la letra: los nombres, el lugar y lo que ya pasó no pueden cambiar.\n${story.state}`);
     parts.push(`Lo ocurrido hasta ahora:\n${story.chapters.map((chapter, index) => `Capítulo ${index + 1}: ${chapter.summary}`).join('\n')}`);
-    parts.push(`Final del capítulo anterior, para enlazar la voz y la escena:\n...${story.chapters[story.chapters.length - 1].text.slice(-1200)}`);
-    parts.push(`Escribe el capítulo ${story.chapters.length + 1}. Continúa desde ahí sin repetir ni resumir lo ya contado, y haz que la situación cambie respecto al capítulo anterior.`);
+    parts.push(`Últimas páginas del capítulo anterior. Este es el punto exacto donde se quedó la historia:\n...${story.chapters[story.chapters.length - 1].text.slice(-2600)}`);
+    parts.push([
+      `Escribe el capítulo ${story.chapters.length + 1} de esta misma historia.`,
+      'Arranca en el instante siguiente a esas últimas líneas, con los mismos personajes, en el mismo lugar o explicando en una frase cómo llegaron a otro.',
+      'No vuelvas a presentar a nadie ni repitas lo ya contado, no empieces de cero y no cambies los nombres.',
+      'Recoge al menos uno de los hilos abiertos y haz que la situación cambie para cuando termine el capítulo.'
+    ].join(' '));
   }
-  parts.push(instruction ? `Lo que debe pasar en este capítulo: ${instruction}` : 'Continúa la historia como mejor funcione.');
+  parts.push(instruction ? `Lo que debe pasar en este capítulo: ${instruction}` : 'Decide tú qué pasa, siguiendo lo que la escena anterior ya estaba pidiendo.');
   parts.push(`Extensión: ${length}.`);
   return parts.join('\n\n');
 }
@@ -294,6 +324,15 @@ async function handleStory(req, res) {
     } catch (error) {
       console.warn(`No se pudo resumir el capítulo (${error.message}).`);
     }
+    try {
+      const updated = await text.complete({
+        system: ENHANCERS.state,
+        prompt: `${story.state ? `Estado anterior:\n${story.state}\n\n` : ''}Capítulo:\n${chapterText}`
+      });
+      if (updated) story.state = updated;
+    } catch (error) {
+      console.warn(`No se pudo actualizar el estado de la historia (${error.message}).`);
+    }
     story.chapters.push({ title: heading, text: chapterText, summary, created: new Date().toISOString() });
     if (story.chapters.length === 1) story.title = heading || 'Sin título';
     try {
@@ -332,7 +371,26 @@ async function handleScenePrompt(req, res) {
   const positive = (/POSITIVO:\s*(.+)/i.exec(reply) || [])[1] || '';
   const negative = (/NEGATIVO:\s*(.+)/i.exec(reply) || [])[1] || '';
   if (!positive.trim()) throw new HttpError(502, 'El modelo no devolvió un prompt usable. Intenta de nuevo.');
-  sendJson(res, 200, { positive: positive.trim(), negative: negative.trim() });
+  const quality = images === comfy && config.promptSuffix ? `, ${config.promptSuffix}` : '';
+  sendJson(res, 200, { positive: `${positive.trim()}${quality}`, negative: negative.trim() });
+}
+
+async function handleSuggestions(req, res) {
+  const body = await readBody(req);
+  const story = stories.read(body.storyId || '');
+  if (!story || !story.chapters.length) throw new HttpError(404, 'Esa historia todavía no tiene capítulos.');
+  const last = story.chapters[story.chapters.length - 1];
+  const reply = await text.complete({
+    system: ENHANCERS.suggestions,
+    prompt: `${story.state ? `Estado:\n${story.state}\n\n` : ''}Final del capítulo ${story.chapters.length}:\n...${last.text.slice(-1800)}`
+  });
+  const options = reply
+    .split('\n')
+    .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter(line => line.length > 12)
+    .slice(0, 3);
+  if (!options.length) throw new HttpError(502, 'El modelo no devolvió sugerencias. Intenta de nuevo.');
+  sendJson(res, 200, { options });
 }
 
 function handleStories(req, res) {
@@ -444,6 +502,7 @@ const routes = {
   'POST /api/video': handleVideo,
   'POST /api/character': handleCharacter,
   'POST /api/scene-prompt': handleScenePrompt,
+  'POST /api/suggestions': handleSuggestions,
   'GET /api/stories': handleStories,
   'GET /api/status': handleStatus
 };

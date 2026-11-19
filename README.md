@@ -20,7 +20,7 @@ Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 
 ## Historias
 
-Las historias se guardan por capítulos en `OUTPUT_DIR/historias`. Cada una conserva la ficha del protagonista, las etiquetas y un resumen por capítulo, que es lo que da continuidad al siguiente. Desde la página se puede crear la ficha a partir de una idea, continuar cualquier historia, exportarla a PDF y sacar de un capítulo el prompt positivo y negativo para generar su imagen.
+Las historias se guardan por capítulos en `OUTPUT_DIR/historias`. Cada una conserva la ficha del protagonista, las etiquetas y un resumen por capítulo, que es lo que da continuidad al siguiente. Además del resumen, cada historia mantiene un estado con personajes, lugar, momento e hilos abiertos, que se actualiza en cada capítulo y es lo que evita que el siguiente empiece de cero. Desde la página se puede crear la ficha a partir de una idea, continuar la historia desde la propia lectura (con ideas sugeridas o escribiendo la tuya), borrarla, exportarla a PDF y sacar de un capítulo el prompt positivo y negativo para generar su imagen.
 
 Los PDF se generan en el navegador con jsPDF, incluido en `public/vendor/`.
 
@@ -35,7 +35,7 @@ Los PDF se generan en el navegador con jsPDF, incluido en `public/vendor/`.
 
 3. Elige la contraseña cuando te la pida y abre el enlace que aparece al final.
 
-El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Para cambiar de estilo de imagen, ejecútalo con `MODEL_PROFILE=anime` (Animagine XL 4.0) o `MODEL_PROFILE=realista` (Juggernaut XL, el predeterminado). Para el video, ejecútalo con `VIDEO=1`, que descarga Wan 2.2 (unos 18 GB). El perfil elegido se recuerda entre ejecuciones. Para historias más ricas, ejecútalo con `TEXT=grande` (Mistral Small 24B, 14 GB) en vez del modelo normal de 8B. Otras variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
+El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Para cambiar de estilo de imagen, ejecútalo con `MODEL_PROFILE=anime` (Animagine XL 4.0) o `MODEL_PROFILE=realista` (Juggernaut XL, el predeterminado). Para el video, ejecútalo con `VIDEO=1`, que descarga Wan 2.2 (unos 18 GB). El perfil elegido se recuerda entre ejecuciones. Para historias más ricas, ejecútalo con `TEXT=grande` (Mistral Small 24B, 14 GB) en vez del modelo normal de 8B. El contexto del modelo de texto se ajusta con `OLLAMA_NUM_CTX` (12288 por defecto). Otras variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
 
 ## Acceso desde otros dispositivos
 

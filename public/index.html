@@ -537,6 +537,60 @@
       font-size: 0.9rem;
     }
 
+    .continue {
+      margin-top: 22px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 3px 3px 0;
+      font-family: var(--ui);
+    }
+
+    .continue h3 {
+      margin: 0 0 10px;
+      font-family: var(--display);
+      font-size: 1.5rem;
+      font-weight: 500;
+    }
+
+    .continue textarea {
+      min-height: 96px;
+      margin-bottom: 10px;
+    }
+
+    .continue .primary {
+      flex: 1;
+      font-size: 1rem;
+    }
+
+    .suggestions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .suggestions button {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      background: transparent;
+      color: inherit;
+      font-family: var(--read);
+      font-size: 1rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .suggestions button:hover {
+      border-color: var(--gold);
+    }
+
+    .suggestions button[aria-pressed="true"] {
+      border-color: var(--gold);
+      background: var(--accent-soft);
+    }
+
     .scene-prompt {
       margin-top: 16px;
       padding: 16px;
@@ -1071,6 +1125,58 @@
       return actions;
     }
 
+    function continuePanel(item) {
+      const next = (item.chapter || 0) + 1;
+      const input = el('textarea', { id: 'next-chapter', rows: '2', placeholder: 'Qué quieres que pase ahora, o déjalo vacío y que siga solo' });
+      const suggest = el('button', { type: 'button', class: 'secondary', text: 'Sugerir ideas' });
+      const write = el('button', { type: 'button', class: 'primary', text: `Escribir capítulo ${next}` });
+      const list = el('div', { class: 'suggestions' });
+
+      suggest.addEventListener('click', async () => {
+        suggest.disabled = true;
+        suggest.textContent = 'Pensando…';
+        list.replaceChildren();
+        try {
+          const response = await fetch('/api/suggestions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storyId: item.storyId })
+          });
+          if (!response.ok) throw new Error(await readError(response));
+          const { options } = await response.json();
+          list.replaceChildren(...options.map(option => {
+            const button = el('button', { type: 'button', text: option });
+            button.addEventListener('click', () => {
+              input.value = option;
+              list.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+            });
+            return button;
+          }));
+        } catch (error) {
+          list.replaceChildren(el('p', { class: 'hint', text: error.message || 'No se pudieron pedir sugerencias.' }));
+        } finally {
+          suggest.disabled = false;
+          suggest.textContent = 'Sugerir ideas';
+        }
+      });
+
+      write.addEventListener('click', () => {
+        if (state.busy) return;
+        state.storyId = item.storyId;
+        $('story-select').value = item.storyId;
+        promptInput.value = input.value.trim();
+        setMode('story');
+        submit();
+      });
+
+      return el('section', { class: 'continue' }, [
+        el('h3', { text: `Capítulo ${next}` }),
+        input,
+        el('div', { class: 'row' }, [suggest, write]),
+        list
+      ]);
+    }
+
     async function buildScenePrompt(item, button) {
       button.disabled = true;
       button.textContent = 'Pensando…';
@@ -1168,6 +1274,7 @@
       state.current = item;
       if (item.type === 'story') {
         sheet.replaceChildren(renderStory(item.text, false, item.chapter), storyActions(item));
+        if (item.storyId) sheet.append(continuePanel(item));
       } else {
         const media = item.type === 'video'
           ? el('video', { src: item.src, controls: true, loop: true, autoplay: true, muted: true, playsinline: true })

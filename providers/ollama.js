@@ -1,6 +1,6 @@
 const { HttpError, request, readLines } = require('../lib/core');
 
-function createOllama({ url, model }) {
+function createOllama({ url, model, numCtx }) {
   const missingModel = `El modelo ${model} no está descargado. Ejecuta: ollama pull ${model}`;
 
   async function failure(response) {
@@ -40,7 +40,7 @@ function createOllama({ url, model }) {
       const response = await request(`${url}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: messages(system, prompt, image), stream: true, options: { temperature: 1, top_p: 0.95, repeat_penalty: 1.08, num_ctx: 8192 } }),
+        body: JSON.stringify({ model, messages: messages(system, prompt, image), stream: true, options: { temperature: 0.9, top_p: 0.95, repeat_penalty: 1.08, num_ctx: numCtx } }),
         signal
       }, 'Ollama');
       if (!response.ok) throw await failure(response);
@@ -61,7 +61,7 @@ function createOllama({ url, model }) {
       const response = await request(`${url}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: messages(system, prompt), stream: false, options: { temperature: 0.4 } }),
+        body: JSON.stringify({ model, messages: messages(system, prompt), stream: false, options: { temperature: 0.4, num_ctx: numCtx } }),
         timeout: 180000
       }, 'Ollama');
       if (!response.ok) throw await failure(response);

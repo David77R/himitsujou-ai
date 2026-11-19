@@ -256,12 +256,17 @@ async function handleImage(req, res) {
   const image = parseImage(body.image);
   const aspectRatio = body.aspectRatio in IMAGE_SIZES ? body.aspectRatio : '1:1';
   const original = cleanPrompt(body.prompt);
+  const characters = (Array.isArray(body.characters) ? body.characters : []).map(cleanPrompt).filter(Boolean).slice(0, 2);
   if (!original && !image) throw new HttpError(400, 'Describe la imagen o escena que quieres crear.');
+  if (characters.length === 1) throw new HttpError(400, 'Describe a los dos personajes, o deja ambos campos vacíos.');
   const job = startJob('image', async () => {
     const base = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
     const prompt = images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
-    const result = await images.generateImage({ prompt, image, aspectRatio, detail: body.detail !== false });
-    return { ...result, prompt: prompt !== original ? prompt : undefined };
+    const regions = images === comfy ? await Promise.all(characters.map(character => enhance('image', character))) : [];
+    const sent = images === comfy ? prompt : [prompt, ...characters].join('. ');
+    const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions });
+    const used = regions.length ? `${prompt} | Izquierda: ${regions[0]} | Derecha: ${regions[1]}` : prompt;
+    return { ...result, prompt: used !== original ? used : undefined };
   });
   sendJson(res, 202, publicJob(job));
 }

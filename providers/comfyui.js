@@ -58,6 +58,30 @@ function collectFiles(outputs) {
   return files;
 }
 
+function addRegions(workflow, regions, width, height) {
+  const samplerId = Object.keys(workflow).find(id => workflow[id].class_type === 'KSampler');
+  if (!samplerId || !regions.length) return workflow;
+  const sampler = workflow[samplerId];
+  const encoder = workflow[sampler.inputs.positive[0]];
+  if (!encoder || !encoder.inputs.clip) return workflow;
+  const slice = Math.floor(width / regions.length / 8) * 8;
+  let combined = sampler.inputs.positive;
+  regions.forEach((text, index) => {
+    const encodeId = `${110 + index}`;
+    const areaId = `${120 + index}`;
+    const combineId = `${130 + index}`;
+    workflow[encodeId] = { class_type: 'CLIPTextEncode', inputs: { text, clip: encoder.inputs.clip } };
+    workflow[areaId] = {
+      class_type: 'ConditioningSetArea',
+      inputs: { conditioning: [encodeId, 0], width: slice, height, x: slice * index, y: 0, strength: 1 }
+    };
+    workflow[combineId] = { class_type: 'ConditioningCombine', inputs: { conditioning_1: combined, conditioning_2: [areaId, 0] } };
+    combined = [combineId, 0];
+  });
+  sampler.inputs.positive = combined;
+  return workflow;
+}
+
 function addDetailPass(workflow, { scale, denoise, steps }) {
   const decodeId = Object.keys(workflow).find(id => workflow[id].class_type === 'VAEDecode');
   if (!decodeId) return workflow;
@@ -231,12 +255,15 @@ function createComfy(options) {
       }
     },
 
-    async generateImage({ prompt, image, aspectRatio, detail }) {
+    async generateImage({ prompt, image, aspectRatio, detail, regions = [] }) {
       const [width, height] = IMAGE_SIZES[aspectRatio] || IMAGE_SIZES['1:1'];
       const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise, SAMPLER: sampler, SCHEDULER: scheduler, CFG: cfg, STEPS: steps };
       if (image) values.IMAGE = await upload(image);
       const name = image ? WORKFLOWS.image.reference : WORKFLOWS.image.text;
-      return run(name, values, imageTimeout, 'image/', detail ? workflow => addDetailPass(workflow, detailPass) : null);
+      return run(name, values, imageTimeout, 'image/', workflow => {
+        const refined = detail ? addDetailPass(workflow, detailPass) : workflow;
+        return addRegions(refined, regions, width, height);
+      });
     },
 
     async generateVideo({ prompt, image, aspectRatio, seconds }) {

@@ -162,6 +162,23 @@
       font-size: 0.82rem;
     }
 
+    .characters summary {
+      cursor: pointer;
+    }
+
+    .characters[open] {
+      gap: 10px;
+    }
+
+    .characters p {
+      margin: 0;
+    }
+
+    .characters textarea {
+      width: 100%;
+      min-height: 84px;
+    }
+
     .drop {
       position: relative;
       display: flex;
@@ -579,6 +596,13 @@
           <span class="hint">Ctrl + Enter para crear</span>
         </label>
 
+        <details class="field characters" id="characters-field" hidden>
+          <summary class="field-label">Dos personajes (opcional)</summary>
+          <p class="hint">Arriba describe la escena y lo que hacen juntos. Aquí, cómo es cada uno.</p>
+          <textarea id="character-left" rows="3" placeholder="Personaje de la izquierda"></textarea>
+          <textarea id="character-right" rows="3" placeholder="Personaje de la derecha"></textarea>
+        </details>
+
         <div class="field">
           <span class="field-label">Imagen de referencia</span>
           <label class="drop" id="drop">
@@ -743,6 +767,7 @@
       if (!state.image) dropText.textContent = copy[mode].drop;
       $('length-field').hidden = mode !== 'story';
       $('ratio-field').hidden = mode !== 'image';
+      $('characters-field').hidden = mode !== 'image';
       $('video-field').hidden = mode !== 'video';
       renderStatus();
     }
@@ -986,7 +1011,13 @@
       const stop = showWaiting(mode);
       const payload = mode === 'video'
         ? { prompt, aspectRatio: state.options.videoRatio, seconds: Number(state.options.seconds), image: imagePayload() }
-        : { prompt, aspectRatio: state.options.aspectRatio, detail: state.options.detail === 'si', image: imagePayload() };
+        : {
+          prompt,
+          aspectRatio: state.options.aspectRatio,
+          detail: state.options.detail === 'si',
+          characters: [$('character-left').value.trim(), $('character-right').value.trim()],
+          image: imagePayload()
+        };
       try {
         const result = await runJob(mode === 'video' ? '/api/video' : '/api/image', payload);
         const item = {

@@ -302,8 +302,8 @@ async function handleStory(req, res) {
       console.error('No se pudo guardar la historia:', error.message);
     }
   }
-  if (notice) res.write(`${STREAM_ERROR}${notice}`);
-  else res.write(`${STREAM_META}${JSON.stringify({ storyId: story.id, title: story.title, chapter: story.chapters.length })}`);
+  if (notice) res.write(`${STREAM_ERROR}${notice}. El capítulo se guardó hasta donde llegó.`);
+  res.write(`${STREAM_META}${JSON.stringify({ storyId: story.id, title: story.title, chapter: story.chapters.length })}`);
   res.end();
 }
 

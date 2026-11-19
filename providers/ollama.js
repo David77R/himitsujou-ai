@@ -40,7 +40,7 @@ function createOllama({ url, model }) {
       const response = await request(`${url}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: messages(system, prompt, image), stream: true, options: { temperature: 1 } }),
+        body: JSON.stringify({ model, messages: messages(system, prompt, image), stream: true, options: { temperature: 1, top_p: 0.95, repeat_penalty: 1.08, num_ctx: 8192 } }),
         signal
       }, 'Ollama');
       if (!response.ok) throw await failure(response);

@@ -37,7 +37,15 @@ ENHANCE_STYLE=tags"
     ;;
 esac
 CHECKPOINT_URL="${CHECKPOINT_URL:-$profile_url}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-dolphin3:8b}"
+saved_text=$(grep -s '^TEXT_SIZE=' "$APP_DIR/.env" | cut -d= -f2 || true)
+TEXT="${TEXT:-${saved_text:-normal}}"
+case "$TEXT" in
+  normal) text_model="dolphin3:8b" ;;
+  grande) text_model="huihui_ai/mistral-small-abliterated:24b" ;;
+  *) printf '\033[1;31mTEXT debe ser normal o grande.\033[0m\n'; exit 1 ;;
+esac
+OLLAMA_MODEL="${OLLAMA_MODEL:-$text_model}"
+export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-3m}"
 PORT="${PORT:-3000}"
 NODE_MAJOR=22
 
@@ -75,6 +83,18 @@ curl -fs http://127.0.0.1:11434/api/tags >/dev/null || fail "Ollama no arrancó.
 
 step "Descargando el modelo de texto ($OLLAMA_MODEL)"
 ollama pull "$OLLAMA_MODEL"
+
+if command -v nvidia-smi >/dev/null; then
+  ollama run "$OLLAMA_MODEL" hola >/dev/null 2>&1 || true
+  if ollama ps 2>/dev/null | grep -qi '100% CPU'; then
+    echo "Ollama no está usando la GPU. Reinstalando para que la detecte."
+    curl -fsSL https://ollama.com/install.sh | sh
+    pkill -f "ollama serve" 2>/dev/null || true
+    sleep 2
+    nohup ollama serve >/workspace/ollama.log 2>&1 &
+    for _ in $(seq 1 30); do curl -fs http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 1; done
+  fi
+fi
 
 download() {
   local folder="$1" url="$2" name target
@@ -149,6 +169,7 @@ OLLAMA_MODEL=$OLLAMA_MODEL
 COMFY_URL=$comfy_url
 COMFY_CHECKPOINT=$checkpoint
 MODEL_PROFILE=$MODEL_PROFILE
+TEXT_SIZE=$TEXT
 $profile_settings
 ENHANCE_PROMPTS=true
 EOF

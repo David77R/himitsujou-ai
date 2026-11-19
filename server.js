@@ -90,7 +90,15 @@ const LENGTHS = {
 };
 
 const STORY_INSTRUCTIONS = [
-  'Escribes historias originales de ficción para adultos con voz propia, imágenes concretas y diálogos naturales.',
+  'Escribes ficción original para adultos con voz propia.',
+  'Escena, no resumen: cuenta los hechos mientras ocurren, en tiempo presente de la acción, en vez de narrar por encima lo que pasó.',
+  'Cada personaje quiere algo concreto y actúa para conseguirlo; lo que uno hace cambia lo que hace el otro, y la escena avanza por esa fricción.',
+  'Usa diálogo real, con interrupciones, silencios y frases a medias; que los personajes se contradigan, mientan o esquiven.',
+  'Ancla cada escena en detalles físicos concretos: lo que se ve, se oye, se huele y se toca, incluidos los gestos y la respiración.',
+  'Muestra lo que sienten por lo que hacen y por su cuerpo, no nombrando la emoción.',
+  'Varía el ritmo: frases cortas en los momentos de tensión, más largas cuando el momento se abre.',
+  'Evita los lugares comunes, los adjetivos de relleno y las frases hechas; si una imagen suena previsible, busca otra.',
+  'Termina en un momento que deje peso, no en una conclusión explicada.',
   'Responde en el mismo idioma en que esté escrita la petición.',
   'La primera línea es solo el título, sin comillas, símbolos ni formato markdown.',
   'Después escribe la historia en párrafos separados por una línea en blanco, sin encabezados ni listas.',

@@ -29,7 +29,7 @@ Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 
 3. Elige la contraseña cuando te la pida y abre el enlace que aparece al final.
 
-El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Para cambiar de estilo de imagen, ejecútalo con `MODEL_PROFILE=anime` (Animagine XL 4.0) o `MODEL_PROFILE=realista` (Juggernaut XL, el predeterminado). Para el video, ejecútalo con `VIDEO=1`, que descarga Wan 2.2 (unos 18 GB). El perfil elegido se recuerda entre ejecuciones. Otras variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
+El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Para cambiar de estilo de imagen, ejecútalo con `MODEL_PROFILE=anime` (Animagine XL 4.0) o `MODEL_PROFILE=realista` (Juggernaut XL, el predeterminado). Para el video, ejecútalo con `VIDEO=1`, que descarga Wan 2.2 (unos 18 GB). El perfil elegido se recuerda entre ejecuciones. Para historias más ricas, ejecútalo con `TEXT=grande` (Mistral Small 24B, 14 GB) en vez del modelo normal de 8B. Otras variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
 
 ## Acceso desde otros dispositivos
 

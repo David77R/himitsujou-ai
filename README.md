@@ -18,6 +18,12 @@ Herramienta personal para crear historias, imágenes y videos a partir de un pro
 
 Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 
+## Historias
+
+Las historias se guardan por capítulos en `OUTPUT_DIR/historias`. Cada una conserva la ficha del protagonista, las etiquetas y un resumen por capítulo, que es lo que da continuidad al siguiente. Desde la página se puede crear la ficha a partir de una idea, continuar cualquier historia, exportarla a PDF y sacar de un capítulo el prompt positivo y negativo para generar su imagen.
+
+Los PDF se generan en el navegador con jsPDF, incluido en `public/vendor/`.
+
 ## En Vast.ai
 
 1. Alquila una máquina con la plantilla **ComfyUI** (una RTX 3090 basta para imágenes).

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { HttpError, MIME_BY_EXT, EXT_BY_MIME, loadEnv } = require('./lib/core');
+const { createStore } = require('./lib/stories');
 const { createGemini } = require('./providers/gemini');
 const { createOllama } = require('./providers/ollama');
 const { createComfy, IMAGE_SIZES, VIDEO_SIZES } = require('./providers/comfyui');
@@ -79,6 +80,7 @@ if (!['127.0.0.1', 'localhost', '::1'].includes(config.host) && !config.password
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const MAX_BODY = 20 * 1024 * 1024;
 const STREAM_ERROR = '\u0000';
+const STREAM_META = '\u0001';
 const JOB_TTL = 2 * 60 * 60 * 1000;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const VIDEO_SECONDS = [3, 5];
@@ -107,13 +109,26 @@ const STORY_INSTRUCTIONS = [
 
 const FIDELITY = { suelta: -1.5, normal: 0, alta: 2, maxima: 3.5 };
 
+const CHARACTER_SHEET = [
+  'Conviertes una idea breve en la ficha de un protagonista de ficción para adultos.',
+  'Responde en el mismo idioma de la idea, en texto plano, sin markdown ni viñetas.',
+  'Escribe una línea por apartado, con este orden y estos nombres: Nombre, Edad, Aspecto, Forma de hablar, Carácter, Herida, Deseo, Secreto.',
+  'Todos los personajes son adultos; si la idea no dice la edad, ponle treinta y tantos.',
+  'En Herida pon lo que le pasó y aún le pesa. En Deseo, lo que persigue ahora. En Secreto, lo que esconde y puede estallar.',
+  'Sé concreto y evita los lugares comunes: nada de "misterioso" o "de pasado oscuro" sin decir qué pasó.'
+].join(' ');
+
 const ENHANCERS = {
+  character: CHARACTER_SHEET,
+  summary: 'Resume en tres o cuatro frases lo que ocurre en este capítulo: hechos, decisiones y lo que cambia entre los personajes. Sin valoraciones ni adornos. Responde solo con el resumen, en el idioma del capítulo.',
+  scene: 'From the scene you receive, write an image prompt for an anime diffusion model. Reply with exactly two lines and nothing else. First line: "POSITIVO:" followed by comma-separated Danbooru-style tags for the most visual moment — subject count tag (1girl, 1boy, 2girls, 1other, no humans), appearance, clothing, pose, action, setting, lighting and composition. Second line: "NEGATIVO:" followed by comma-separated tags naming what must not appear in that image. Use short tags, never sentences.',
   imageTags: 'Rewrite the user idea as Danbooru-style tags for an anime image diffusion model, separated by commas. Start with the subject count tag (1girl, 1boy, 2girls, 1other or no humans), then appearance, clothing, pose, action, setting, lighting, composition and art style. Use short tags, not sentences. Keep every element the user asked for and do not add or remove content. Reply with the tags only.',
   image: 'Rewrite the user idea as one English prompt for an image diffusion model: comma-separated, concrete visual details (subject, setting, lighting, style, composition, quality). Keep every element the user asked for and do not add or remove content. Reply with the prompt only.',
   video: 'Rewrite the user idea as one English paragraph for a video diffusion model, describing the subject, its motion, camera movement, setting, lighting and style. Keep every element the user asked for and do not add or remove content. Reply with the prompt only.'
 };
 
 const jobs = new Map();
+const stories = createStore(config.outputDir);
 
 function sendJson(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -218,29 +233,47 @@ setInterval(() => {
   for (const [id, job] of jobs) if (job.createdAt < limit) jobs.delete(id);
 }, 10 * 60 * 1000).unref();
 
+function chapterPrompt(story, instruction, length) {
+  const parts = [];
+  if (story.character) parts.push(`Protagonista:\n${story.character}`);
+  if (story.tags) parts.push(`Etiquetas que definen el tono, el género y el mundo: ${story.tags}`);
+  if (story.chapters.length) {
+    parts.push(`Lo ocurrido hasta ahora:\n${story.chapters.map((chapter, index) => `Capítulo ${index + 1}: ${chapter.summary}`).join('\n')}`);
+    parts.push(`Final del capítulo anterior, para enlazar la voz y la escena:\n...${story.chapters[story.chapters.length - 1].text.slice(-1200)}`);
+    parts.push(`Escribe el capítulo ${story.chapters.length + 1}. Continúa desde ahí sin repetir ni resumir lo ya contado, y haz que la situación cambie respecto al capítulo anterior.`);
+  }
+  parts.push(instruction ? `Lo que debe pasar en este capítulo: ${instruction}` : 'Continúa la historia como mejor funcione.');
+  parts.push(`Extensión: ${length}.`);
+  return parts.join('\n\n');
+}
+
 async function handleStory(req, res) {
   const body = await readBody(req);
   const image = parseImage(body.image);
   const length = LENGTHS[body.length] || LENGTHS.media;
-  let prompt = cleanPrompt(body.prompt);
-  if (!prompt && !image) throw new HttpError(400, 'Escribe una idea o sube una imagen para empezar.');
-  if (!prompt) prompt = 'Escribe una historia inspirada en esta imagen.';
+  const instruction = cleanPrompt(body.prompt);
+  const existing = body.storyId ? stories.read(body.storyId) : null;
+  if (body.storyId && !existing) throw new HttpError(404, 'Esa historia ya no existe.');
+  if (!instruction && !image && !existing) throw new HttpError(400, 'Escribe una idea o sube una imagen para empezar.');
+
+  const story = existing || stories.create({ character: cleanPrompt(body.character), tags: cleanPrompt(body.tags) });
+  const prompt = chapterPrompt(story, instruction || (image ? 'Parte de la imagen que recibes.' : ''), length);
 
   const controller = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) controller.abort();
   });
 
-  let story = '';
+  let written = '';
   let started = false;
   let notice = null;
   try {
-    for await (const chunk of text.streamStory({ system: STORY_INSTRUCTIONS, prompt: `${prompt}\n\nExtensión: ${length}.`, image, signal: controller.signal })) {
+    for await (const chunk of text.streamStory({ system: STORY_INSTRUCTIONS, prompt, image, signal: controller.signal })) {
       if (!started) {
         started = true;
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
       }
-      story += chunk;
+      written += chunk;
       res.write(chunk);
     }
   } catch (error) {
@@ -250,15 +283,58 @@ async function handleStory(req, res) {
   }
 
   if (!started) throw new HttpError(502, 'El modelo no devolvió ninguna historia. Intenta de nuevo.');
-  if (story.trim()) {
+
+  const chapterText = written.trim();
+  if (chapterText) {
+    const heading = chapterText.split('\n')[0].replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+    let summary = heading;
     try {
-      saveCreation('historia', 'txt', story.trim());
+      summary = (await text.complete({ system: ENHANCERS.summary, prompt: chapterText })) || heading;
+    } catch (error) {
+      console.warn(`No se pudo resumir el capítulo (${error.message}).`);
+    }
+    story.chapters.push({ title: heading, text: chapterText, summary, created: new Date().toISOString() });
+    if (story.chapters.length === 1) story.title = heading || 'Sin título';
+    try {
+      stories.save(story);
+      saveCreation('historia', 'txt', chapterText);
     } catch (error) {
       console.error('No se pudo guardar la historia:', error.message);
     }
   }
   if (notice) res.write(`${STREAM_ERROR}${notice}`);
+  else res.write(`${STREAM_META}${JSON.stringify({ storyId: story.id, title: story.title, chapter: story.chapters.length })}`);
   res.end();
+}
+
+async function handleCharacter(req, res) {
+  const body = await readBody(req);
+  const idea = cleanPrompt(body.idea);
+  if (!idea) throw new HttpError(400, 'Describe en una línea quién es el protagonista.');
+  const sheet = await text.complete({ system: ENHANCERS.character, prompt: idea });
+  if (!sheet) throw new HttpError(502, 'El modelo no devolvió ninguna ficha. Intenta de nuevo.');
+  sendJson(res, 200, { sheet });
+}
+
+async function handleScenePrompt(req, res) {
+  const body = await readBody(req);
+  const scene = cleanPrompt(body.scene);
+  if (!scene) throw new HttpError(400, 'No hay escena de la que partir.');
+  const reply = await text.complete({ system: ENHANCERS.scene, prompt: scene.slice(-4000) });
+  const positive = (/POSITIVO:\s*(.+)/i.exec(reply) || [])[1] || '';
+  const negative = (/NEGATIVO:\s*(.+)/i.exec(reply) || [])[1] || '';
+  if (!positive.trim()) throw new HttpError(502, 'El modelo no devolvió un prompt usable. Intenta de nuevo.');
+  sendJson(res, 200, { positive: positive.trim(), negative: negative.trim() });
+}
+
+function handleStories(req, res) {
+  sendJson(res, 200, { stories: stories.list() });
+}
+
+function handleStoryRead(req, res, id) {
+  const story = stories.read(id);
+  if (!story) throw new HttpError(404, 'Esa historia ya no existe.');
+  sendJson(res, 200, story);
 }
 
 async function handleImage(req, res) {
@@ -276,7 +352,7 @@ async function handleImage(req, res) {
     const regions = images === comfy ? await Promise.all(characters.map(character => raw ? character : enhance('image', character))) : [];
     const sent = images === comfy ? prompt : [prompt, ...characters].join('. ');
     const fidelity = FIDELITY[body.fidelity] || 0;
-    const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions, fidelity });
+    const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions, fidelity, negativeOverride: cleanPrompt(body.negative) });
     const used = regions.length ? `${prompt} | Izquierda: ${regions[0]} | Derecha: ${regions[1]}` : prompt;
     return { ...result, prompt: used !== original ? used : undefined };
   });
@@ -357,6 +433,9 @@ const routes = {
   'POST /api/story': handleStory,
   'POST /api/image': handleImage,
   'POST /api/video': handleVideo,
+  'POST /api/character': handleCharacter,
+  'POST /api/scene-prompt': handleScenePrompt,
+  'GET /api/stories': handleStories,
   'GET /api/status': handleStatus
 };
 
@@ -376,6 +455,7 @@ const server = http.createServer(async (req, res) => {
     if (route) return await route(req, res);
     if (req.method !== 'GET') return sendJson(res, 405, { error: 'Método no permitido.' });
     if (pathname.startsWith('/api/jobs/')) return handleJob(req, res, pathname.slice('/api/jobs/'.length));
+    if (pathname.startsWith('/api/stories/')) return handleStoryRead(req, res, pathname.slice('/api/stories/'.length));
     if (pathname.startsWith('/creaciones/')) return serveCreation(req, res, pathname.slice('/creaciones/'.length));
     serveStatic(req, res, pathname);
   } catch (error) {

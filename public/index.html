@@ -179,6 +179,67 @@
       min-height: 84px;
     }
 
+    #character-sheet {
+      min-height: 190px;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .row input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .secondary {
+      padding: 10px 14px;
+      white-space: nowrap;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .secondary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .scene-prompt {
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      font-family: var(--ui);
+      font-size: 0.9rem;
+    }
+
+    .scene-prompt h3 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+    }
+
+    .scene-prompt p {
+      margin: 0 0 8px;
+      color: var(--graphite);
+      word-break: break-word;
+    }
+
+    .scene-prompt strong {
+      color: var(--ink);
+    }
+
     .drop {
       position: relative;
       display: flex;
@@ -590,6 +651,29 @@
           <button type="button" data-mode="video" aria-pressed="false">Video</button>
         </div>
 
+        <div class="field" id="story-field">
+          <span class="field-label">Historia</span>
+          <select id="story-select">
+            <option value="">Nueva historia</option>
+          </select>
+
+          <details class="characters" id="character-block">
+            <summary class="field-label">Protagonista</summary>
+            <p class="hint">Describe la idea en una línea y la convierto en ficha, o escríbela tú.</p>
+            <div class="row">
+              <input id="character-idea" placeholder="una exorcista que perdió la voz">
+              <button type="button" class="secondary" id="character-build">Crear ficha</button>
+            </div>
+            <textarea id="character-sheet" rows="8" placeholder="Nombre, edad, aspecto, forma de hablar, carácter, herida, deseo, secreto"></textarea>
+          </details>
+
+          <label class="field">
+            <span class="field-label">Etiquetas</span>
+            <input id="story-tags" placeholder="terror psicológico, años noventa, pueblo costero">
+            <span class="hint">Tono, género, época, lo que quieras fijar para toda la historia.</span>
+          </label>
+        </div>
+
         <label class="field">
           <span class="field-label" id="prompt-label">¿Qué historia quieres leer?</span>
           <textarea id="prompt" placeholder="Una kitsune que trabaja de noche en una tienda 24 horas de Osaka y un cliente que siempre paga con monedas antiguas"></textarea>
@@ -685,8 +769,10 @@
     </div>
   </div>
 
+  <script src="vendor/jspdf.umd.min.js"></script>
   <script>
     const STREAM_ERROR = '\u0000';
+    const STREAM_META = '\u0001';
     const MAX_SIDE = 1536;
     const POLL_MS = 2000;
 
@@ -697,6 +783,8 @@
       busy: false,
       controller: null,
       status: null,
+      storyId: '',
+      sceneNegative: '',
       history: [],
       current: null
     };
@@ -778,10 +866,18 @@
       submitButton.textContent = copy[mode].submit;
       if (!state.image) dropText.textContent = copy[mode].drop;
       $('length-field').hidden = mode !== 'story';
+      $('story-field').hidden = mode !== 'story';
       $('ratio-field').hidden = mode !== 'image';
       $('characters-field').hidden = mode !== 'image';
       $('video-field').hidden = mode !== 'video';
+      if (mode === 'story') updateStoryMode();
       renderStatus();
+    }
+
+    function setOption(name, value) {
+      state.options[name] = value;
+      const group = document.querySelector(`[data-option="${name}"]`);
+      if (group) group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.value === value)));
     }
 
     function setBusy(busy) {
@@ -790,7 +886,10 @@
       submitButton.classList.toggle('is-stop', streaming);
       submitButton.disabled = busy && !streaming;
       submitButton.textContent = busy ? copy[state.mode].busy : copy[state.mode].submit;
-      if (!busy) renderStatus();
+      if (!busy) {
+        if (state.mode === 'story') updateStoryMode();
+        renderStatus();
+      }
     }
 
     function showNotice(message) {
@@ -883,7 +982,103 @@
         setTimeout(() => { copyButton.textContent = 'Copiar'; }, 1600);
       });
       const download = el('a', { href: URL.createObjectURL(new Blob([item.text], { type: 'text/plain;charset=utf-8' })), download: `${slug(item.title)}.txt`, text: 'Descargar .txt' });
-      return el('div', { class: 'actions' }, [copyButton, download, el('span', { class: 'saved', text: item.notice || 'Guardada en creaciones' })]);
+      const actions = el('div', { class: 'actions' }, [copyButton, download]);
+
+      if (item.storyId) {
+        const pdf = el('button', { type: 'button', text: 'Descargar PDF' });
+        pdf.addEventListener('click', () => downloadPdf(item.storyId, pdf));
+        actions.append(pdf);
+      }
+
+      const scene = el('button', { type: 'button', text: 'Prompt de imagen' });
+      scene.addEventListener('click', () => buildScenePrompt(item, scene));
+      actions.append(scene, el('span', { class: 'saved', text: item.notice || 'Guardada en creaciones' }));
+      return actions;
+    }
+
+    async function buildScenePrompt(item, button) {
+      button.disabled = true;
+      button.textContent = 'Pensando…';
+      try {
+        const response = await fetch('/api/scene-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scene: item.text })
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        const panel = el('div', { class: 'scene-prompt' }, [
+          el('h3', { text: 'Prompt para esta escena' }),
+          el('p', {}, [el('strong', { text: 'Sí: ' }), document.createTextNode(data.positive)]),
+          el('p', {}, [el('strong', { text: 'No: ' }), document.createTextNode(data.negative || '—')])
+        ]);
+        const use = el('button', { type: 'button', class: 'secondary', text: 'Generar esta imagen' });
+        use.addEventListener('click', () => {
+          state.sceneNegative = data.negative;
+          setMode('image');
+          promptInput.value = data.positive;
+          setOption('promptMode', 'tal-cual');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        panel.append(use);
+        sheet.querySelector('.scene-prompt')?.remove();
+        sheet.append(panel);
+      } catch (error) {
+        showNotice(error.message || 'No se pudo generar el prompt.');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Prompt de imagen';
+      }
+    }
+
+    async function downloadPdf(storyId, button) {
+      button.disabled = true;
+      button.textContent = 'Preparando…';
+      try {
+        const response = await fetch(`/api/stories/${storyId}`);
+        if (!response.ok) throw new Error(await readError(response));
+        const story = await response.json();
+        if (!window.jspdf) throw new Error('No se pudo cargar el generador de PDF. Revisa tu conexión y recarga la página.');
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+        const margin = 64;
+        const width = doc.internal.pageSize.getWidth() - margin * 2;
+        const bottom = doc.internal.pageSize.getHeight() - margin;
+        let y = margin;
+
+        const write = (text, { size = 11, font = 'normal', gap = 6, spacing = 15 } = {}) => {
+          doc.setFont('times', font);
+          doc.setFontSize(size);
+          for (const line of doc.splitTextToSize(text, width)) {
+            if (y > bottom) {
+              doc.addPage();
+              y = margin;
+            }
+            doc.text(line, margin, y);
+            y += spacing;
+          }
+          y += gap;
+        };
+
+        write(story.title, { size: 24, font: 'bold', spacing: 28, gap: 18 });
+        if (story.tags) write(story.tags, { size: 10, font: 'italic', gap: 16 });
+        if (story.character) {
+          write('Protagonista', { size: 13, font: 'bold', gap: 4, spacing: 18 });
+          write(story.character, { size: 10, gap: 20, spacing: 14 });
+        }
+        story.chapters.forEach((chapter, index) => {
+          doc.addPage();
+          y = margin;
+          write(`${index + 1}. ${chapter.title}`, { size: 16, font: 'bold', spacing: 22, gap: 14 });
+          const body = chapter.text.split('\n').slice(1).join('\n');
+          body.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).forEach(p => write(p, { gap: 10 }));
+        });
+        doc.save(`${slug(story.title)}.pdf`);
+      } catch (error) {
+        showNotice(error.message || 'No se pudo crear el PDF.');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Descargar PDF';
+      }
     }
 
     function mediaActions(item) {
@@ -941,7 +1136,14 @@
         const response = await fetch('/api/story', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, length: state.options.length, image: imagePayload() }),
+          body: JSON.stringify({
+            prompt,
+            length: state.options.length,
+            storyId: state.storyId || undefined,
+            character: $('character-sheet').value.trim(),
+            tags: $('story-tags').value.trim(),
+            image: imagePayload()
+          }),
           signal: state.controller.signal
         });
         if (!response.ok) throw new Error(await readError(response));
@@ -951,8 +1153,7 @@
           const { value, done } = await reader.read();
           if (done) break;
           text += decoder.decode(value, { stream: true });
-          const errorAt = text.indexOf(STREAM_ERROR);
-          sheet.replaceChildren(renderStory(errorAt === -1 ? text : text.slice(0, errorAt), true));
+          sheet.replaceChildren(renderStory(visible(text), true));
         }
         text += decoder.decode();
       } catch (error) {
@@ -965,13 +1166,82 @@
         }
       }
       const errorAt = text.indexOf(STREAM_ERROR);
-      if (errorAt !== -1) {
-        notice = text.slice(errorAt + 1);
-        text = text.slice(0, errorAt);
+      if (errorAt !== -1) notice = text.slice(errorAt + 1).split(STREAM_META)[0];
+      let meta = null;
+      const metaAt = text.indexOf(STREAM_META);
+      if (metaAt !== -1) {
+        try {
+          meta = JSON.parse(text.slice(metaAt + 1));
+        } catch {}
       }
-      const item = { type: 'story', text: text.trim(), title: splitStory(text).title || 'Sin título', notice };
+      text = visible(text).trim();
+      const item = {
+        type: 'story',
+        text,
+        title: splitStory(text).title || 'Sin título',
+        storyId: meta && meta.storyId,
+        notice: notice || (meta && meta.chapter > 1 ? `Capítulo ${meta.chapter} guardado` : null)
+      };
+      if (meta) {
+        state.storyId = meta.storyId;
+        await loadStories();
+      }
       state.history.unshift(item);
       showItem(item);
+    }
+
+    function visible(text) {
+      return text.split(STREAM_ERROR)[0].split(STREAM_META)[0];
+    }
+
+    async function loadStories() {
+      try {
+        const response = await fetch('/api/stories');
+        if (!response.ok) return;
+        const { stories } = await response.json();
+        const select = $('story-select');
+        select.replaceChildren(el('option', { value: '', text: 'Nueva historia' }), ...stories.map(story =>
+          el('option', { value: story.id, text: `${story.title} (${story.chapters})` })
+        ));
+        select.value = state.storyId || '';
+        updateStoryMode();
+      } catch {}
+    }
+
+    async function selectStory(id) {
+      state.storyId = id;
+      if (!id) {
+        $('character-sheet').value = '';
+        $('story-tags').value = '';
+        updateStoryMode();
+        return;
+      }
+      try {
+        const response = await fetch(`/api/stories/${id}`);
+        if (!response.ok) return;
+        const story = await response.json();
+        $('character-sheet').value = story.character || '';
+        $('story-tags').value = story.tags || '';
+        state.chapters = story.chapters.length;
+        const last = story.chapters[story.chapters.length - 1];
+        if (last) {
+          const item = { type: 'story', text: last.text, title: last.title, storyId: story.id };
+          state.history.unshift(item);
+          showItem(item);
+        }
+      } catch {}
+      updateStoryMode();
+    }
+
+    function updateStoryMode() {
+      const continuing = Boolean(state.storyId);
+      const select = $('story-select');
+      const option = select.options[select.selectedIndex];
+      const count = continuing && option ? (/\((\d+)\)$/.exec(option.text) || [])[1] : 0;
+      $('prompt-label').textContent = continuing ? `¿Qué pasa en el capítulo ${Number(count) + 1}?` : copy.story.label;
+      promptInput.placeholder = continuing ? 'Déjalo vacío y sigue por donde quiera, o dile hacia dónde llevarlo' : copy.story.placeholder;
+      $('character-block').open = !continuing && $('character-sheet').value === '';
+      if (state.mode === 'story' && !state.busy) submitButton.textContent = continuing ? 'Escribir capítulo' : copy.story.submit;
     }
 
     function formatElapsed(seconds) {
@@ -1029,6 +1299,7 @@
           detail: state.options.detail === 'si',
           raw: state.options.promptMode === 'tal-cual',
           fidelity: state.options.fidelity,
+          negative: state.sceneNegative,
           characters: [$('character-left').value.trim(), $('character-right').value.trim()],
           image: imagePayload()
         };
@@ -1090,9 +1361,32 @@
       group.addEventListener('click', event => {
         const button = event.target.closest('button');
         if (!button) return;
-        state.options[group.dataset.option] = button.dataset.value;
-        group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+        setOption(group.dataset.option, button.dataset.value);
       });
+    });
+
+    $('story-select').addEventListener('change', event => selectStory(event.target.value));
+
+    $('character-build').addEventListener('click', async () => {
+      const idea = $('character-idea').value.trim();
+      const button = $('character-build');
+      if (!idea) return $('character-idea').focus();
+      button.disabled = true;
+      button.textContent = 'Creando…';
+      try {
+        const response = await fetch('/api/character', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idea })
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        $('character-sheet').value = (await response.json()).sheet;
+      } catch (error) {
+        $('character-sheet').value = `No se pudo crear la ficha: ${error.message}`;
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Crear ficha';
+      }
     });
 
     form.addEventListener('submit', event => {
@@ -1135,6 +1429,7 @@
     window.addEventListener('focus', () => { if (!state.busy) loadStatus(); });
 
     loadStatus();
+    loadStories();
   </script>
 </body>
 </html>

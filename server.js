@@ -260,9 +260,10 @@ async function handleImage(req, res) {
   if (!original && !image) throw new HttpError(400, 'Describe la imagen o escena que quieres crear.');
   if (characters.length === 1) throw new HttpError(400, 'Describe a los dos personajes, o deja ambos campos vacíos.');
   const job = startJob('image', async () => {
-    const base = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
-    const prompt = images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
-    const regions = images === comfy ? await Promise.all(characters.map(character => enhance('image', character))) : [];
+    const raw = body.raw === true;
+    const base = raw ? original : original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
+    const prompt = !raw && images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
+    const regions = images === comfy ? await Promise.all(characters.map(character => raw ? character : enhance('image', character))) : [];
     const sent = images === comfy ? prompt : [prompt, ...characters].join('. ');
     const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions });
     const used = regions.length ? `${prompt} | Izquierda: ${regions[0]} | Derecha: ${regions[1]}` : prompt;

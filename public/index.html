@@ -631,6 +631,11 @@
             <button type="button" data-value="4:3" aria-pressed="false">4:3</button>
             <button type="button" data-value="3:4" aria-pressed="false">3:4</button>
           </div>
+          <span class="field-label">Prompt</span>
+          <div class="chips" data-option="promptMode">
+            <button type="button" data-value="mejorado" aria-pressed="true">Mejorado</button>
+            <button type="button" data-value="tal-cual" aria-pressed="false">Tal cual</button>
+          </div>
           <span class="field-label">Calidad</span>
           <div class="chips" data-option="detail">
             <button type="button" data-value="si" aria-pressed="true">Con repaso de detalle</button>
@@ -680,7 +685,7 @@
 
     const state = {
       mode: 'story',
-      options: { length: 'media', aspectRatio: '1:1', detail: 'si', videoRatio: '16:9', seconds: '5' },
+      options: { length: 'media', aspectRatio: '1:1', detail: 'si', promptMode: 'mejorado', videoRatio: '16:9', seconds: '5' },
       image: null,
       busy: false,
       controller: null,
@@ -1015,6 +1020,7 @@
           prompt,
           aspectRatio: state.options.aspectRatio,
           detail: state.options.detail === 'si',
+          raw: state.options.promptMode === 'tal-cual',
           characters: [$('character-left').value.trim(), $('character-right').value.trim()],
           image: imagePayload()
         };

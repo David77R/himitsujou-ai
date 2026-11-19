@@ -4,7 +4,12 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/workspace/himitsujou-ai}"
 REPO_URL="${REPO_URL:-https://github.com/David77R/himitsujou-ai.git}"
 COMFY_DIR="${COMFY_DIR:-/workspace/ComfyUI}"
-MODEL_PROFILE="${MODEL_PROFILE:-realista}"
+saved_profile=$(grep -s '^MODEL_PROFILE=' "$APP_DIR/.env" | cut -d= -f2 || true)
+MODEL_PROFILE="${MODEL_PROFILE:-${saved_profile:-realista}}"
+VIDEO="${VIDEO:-0}"
+VIDEO_FILES="diffusion_models|https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors
+text_encoders|https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+vae|https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors"
 case "$MODEL_PROFILE" in
   realista)
     profile_url="https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
@@ -69,15 +74,37 @@ curl -fs http://127.0.0.1:11434/api/tags >/dev/null || fail "Ollama no arrancó.
 step "Descargando el modelo de texto ($OLLAMA_MODEL)"
 ollama pull "$OLLAMA_MODEL"
 
-step "Descargando el modelo de imágenes"
-checkpoint=$(basename "${CHECKPOINT_URL%%\?*}")
-target="$COMFY_DIR/models/checkpoints/$checkpoint"
-if [ -s "$target" ]; then
-  echo "Ya estaba descargado: $checkpoint"
-else
+download() {
+  local folder="$1" url="$2" name target
+  name=$(basename "${url%%\?*}")
+  target="$COMFY_DIR/models/$folder/$name"
+  if [ -s "$target" ]; then
+    echo "Ya estaba descargado: $name"
+    return
+  fi
   mkdir -p "$(dirname "$target")"
-  curl -fL --progress-bar -o "$target.part" "$CHECKPOINT_URL"
+  echo "Descargando $name"
+  curl -fL --progress-bar -o "$target.part" "$url" || { rm -f "$target.part"; fail "No se pudo descargar $name."; }
   mv "$target.part" "$target"
+}
+
+step "Descargando el modelo de imágenes ($MODEL_PROFILE)"
+checkpoint=$(basename "${CHECKPOINT_URL%%\?*}")
+download checkpoints "$CHECKPOINT_URL"
+
+if [ "$VIDEO" = 1 ]; then
+  step "Descargando los modelos de video (Wan 2.2)"
+  free_gb=$(df -BG --output=avail "$COMFY_DIR" | tail -1 | tr -dc '0-9')
+  pending=0
+  while IFS='|' read -r folder url; do
+    [ -s "$COMFY_DIR/models/$folder/$(basename "$url")" ] || pending=1
+  done <<<"$VIDEO_FILES"
+  if [ "$pending" = 1 ] && [ "${free_gb:-0}" -lt 20 ]; then
+    fail "Solo quedan ${free_gb} GB libres y los modelos de video necesitan unos 20 GB. Libera espacio o alquila una máquina con más disco."
+  fi
+  while IFS='|' read -r folder url; do
+    download "$folder" "$url"
+  done <<<"$VIDEO_FILES"
 fi
 
 step "Descargando el Estudio"
@@ -119,6 +146,7 @@ OLLAMA_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=$OLLAMA_MODEL
 COMFY_URL=$comfy_url
 COMFY_CHECKPOINT=$checkpoint
+MODEL_PROFILE=$MODEL_PROFILE
 $profile_settings
 ENHANCE_PROMPTS=true
 EOF

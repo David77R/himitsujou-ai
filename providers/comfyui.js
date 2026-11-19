@@ -22,6 +22,13 @@ const WORKFLOWS = {
   video: { text: 'video-texto.json', reference: 'video-referencia.json' }
 };
 
+const MODEL_INPUTS = {
+  ckpt_name: 'checkpoints',
+  unet_name: 'diffusion_models',
+  clip_name: 'text_encoders',
+  vae_name: 'vae'
+};
+
 const POLL_INTERVAL = 1500;
 const MAX_POLL_FAILURES = 20;
 
@@ -153,6 +160,30 @@ function createComfy(options) {
     return download(match);
   }
 
+  async function missingModels(kind) {
+    const needed = [];
+    for (const name of Object.values(WORKFLOWS[kind])) {
+      const workflow = fill(loadWorkflow(name), { CHECKPOINT: checkpoint });
+      for (const node of Object.values(workflow)) {
+        for (const [input, folder] of Object.entries(MODEL_INPUTS)) {
+          const value = node.inputs && node.inputs[input];
+          if (typeof value === 'string' && !needed.some(item => item.value === value)) needed.push({ folder, value });
+        }
+      }
+    }
+    const lists = {};
+    for (const { folder } of needed) {
+      if (folder in lists) continue;
+      try {
+        const response = await call(`/models/${folder}`, { timeout: 2500 });
+        lists[folder] = response.ok ? await response.json() : null;
+      } catch {
+        lists[folder] = null;
+      }
+    }
+    return needed.filter(({ folder, value }) => Array.isArray(lists[folder]) && !lists[folder].includes(value)).map(item => item.value);
+  }
+
   function seed() {
     return crypto.randomInt(0, 2 ** 47);
   }
@@ -168,6 +199,13 @@ function createComfy(options) {
       try {
         const response = await call('/system_stats', { timeout: 2500 });
         if (!response.ok) return { ready: false, label: this.label(kind), detail: `ComfyUI respondió con el error ${response.status}.` };
+        const absent = await missingModels(kind);
+        if (absent.length) {
+          const detail = kind === 'video'
+            ? 'Faltan los modelos de video. En la Jupyter Terminal ejecuta: cd /workspace/himitsujou-ai && git pull -q && VIDEO=1 bash scripts/vast-setup.sh'
+            : `Falta el modelo ${absent[0]} en ComfyUI.`;
+          return { ready: false, label: this.label(kind), detail };
+        }
         return { ready: true, label: this.label(kind), detail: '' };
       } catch {
         return { ready: false, label: this.label(kind), detail: `ComfyUI no responde en ${url}. Enciéndelo o revisa COMFY_URL.` };

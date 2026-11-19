@@ -18,6 +18,19 @@ Herramienta personal para crear historias, imágenes y videos a partir de un pro
 
 Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 
+## En Vast.ai
+
+1. Alquila una máquina con la plantilla **ComfyUI** (una RTX 3090 basta para imágenes).
+2. Abre la **Jupyter Terminal** desde el Instance Portal y ejecuta:
+
+   ```
+   bash <(curl -fsSL https://raw.githubusercontent.com/David77R/himitsujou-ai/main/scripts/vast-setup.sh)
+   ```
+
+3. Elige la contraseña cuando te la pida y abre el enlace que aparece al final.
+
+El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
+
 ## Acceso desde otros dispositivos
 
 Para abrir el Estudio desde el teléfono u otra red, pon `HOST=0.0.0.0` y define `APP_PASSWORD`. El servidor se niega a arrancar abierto a la red sin contraseña.

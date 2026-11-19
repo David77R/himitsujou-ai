@@ -20,7 +20,8 @@ const config = {
   textProvider: env('TEXT_PROVIDER', 'gemini').toLowerCase(),
   imageProvider: env('IMAGE_PROVIDER', 'gemini').toLowerCase(),
   enhancePrompts: env('ENHANCE_PROMPTS', 'true').toLowerCase() !== 'false',
-  promptSuffix: env('PROMPT_SUFFIX', '')
+  promptSuffix: env('PROMPT_SUFFIX', ''),
+  enhanceStyle: env('ENHANCE_STYLE', 'natural').toLowerCase()
 };
 
 const gemini = createGemini({
@@ -45,6 +46,11 @@ const comfy = createComfy({
   scheduler: env('COMFY_SCHEDULER', 'karras'),
   cfg: Number(env('COMFY_CFG', 6.5)),
   steps: Number(env('COMFY_STEPS', 30)),
+  detailPass: {
+    scale: Number(env('COMFY_DETAIL_SCALE', 1.5)),
+    denoise: Number(env('COMFY_DETAIL_DENOISE', 0.45)),
+    steps: Number(env('COMFY_DETAIL_STEPS', 15))
+  },
   fps: Number(env('COMFY_FPS', 24)),
   imageTimeout: Number(env('COMFY_IMAGE_TIMEOUT', 600)) * 1000,
   videoTimeout: Number(env('COMFY_VIDEO_TIMEOUT', 1800)) * 1000
@@ -92,6 +98,7 @@ const STORY_INSTRUCTIONS = [
 ].join(' ');
 
 const ENHANCERS = {
+  imageTags: 'Rewrite the user idea as Danbooru-style tags for an anime image diffusion model, separated by commas. Start with the subject count tag (1girl, 1boy, 2girls, 1other or no humans), then appearance, clothing, pose, action, setting, lighting, composition and art style. Use short tags, not sentences. Keep every element the user asked for and do not add or remove content. Reply with the tags only.',
   image: 'Rewrite the user idea as one English prompt for an image diffusion model: comma-separated, concrete visual details (subject, setting, lighting, style, composition, quality). Keep every element the user asked for and do not add or remove content. Reply with the prompt only.',
   video: 'Rewrite the user idea as one English paragraph for a video diffusion model, describing the subject, its motion, camera movement, setting, lighting and style. Keep every element the user asked for and do not add or remove content. Reply with the prompt only.'
 };
@@ -156,7 +163,8 @@ function saveCreation(prefix, extension, content) {
 async function enhance(kind, prompt) {
   if (!config.enhancePrompts || !prompt || (kind === 'image' && images !== comfy)) return prompt;
   try {
-    const result = await text.complete({ system: ENHANCERS[kind], prompt });
+    const system = kind === 'image' && config.enhanceStyle === 'tags' ? ENHANCERS.imageTags : ENHANCERS[kind];
+    const result = await text.complete({ system, prompt });
     return result.replace(/^["'\s]+|["'\s]+$/g, '') || prompt;
   } catch (error) {
     console.warn(`No se pudo mejorar el prompt (${error.message}). Se usa el original.`);
@@ -252,7 +260,7 @@ async function handleImage(req, res) {
   const job = startJob('image', async () => {
     const base = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
     const prompt = images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
-    const result = await images.generateImage({ prompt, image, aspectRatio });
+    const result = await images.generateImage({ prompt, image, aspectRatio, detail: body.detail !== false });
     return { ...result, prompt: prompt !== original ? prompt : undefined };
   });
   sendJson(res, 202, publicJob(job));

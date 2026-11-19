@@ -58,6 +58,24 @@ function collectFiles(outputs) {
   return files;
 }
 
+function addDetailPass(workflow, { scale, denoise, steps }) {
+  const decodeId = Object.keys(workflow).find(id => workflow[id].class_type === 'VAEDecode');
+  if (!decodeId) return workflow;
+  const [samplerId] = workflow[decodeId].inputs.samples;
+  const sampler = workflow[samplerId];
+  if (!sampler || sampler.class_type !== 'KSampler') return workflow;
+  workflow['100'] = {
+    class_type: 'LatentUpscaleBy',
+    inputs: { upscale_method: 'nearest-exact', scale_by: scale, samples: [samplerId, 0] }
+  };
+  workflow['101'] = {
+    class_type: 'KSampler',
+    inputs: { ...sampler.inputs, steps, denoise, latent_image: ['100', 0] }
+  };
+  workflow[decodeId].inputs.samples = ['101', 0];
+  return workflow;
+}
+
 function executionError(messages) {
   const entry = (messages || []).find(([type]) => type === 'execution_error');
   if (!entry) return 'ComfyUI no pudo completar el flujo.';
@@ -78,7 +96,7 @@ async function rejection(response) {
 }
 
 function createComfy(options) {
-  const { url, workflowDir, checkpoint, negative, negativeVideo, denoise, sampler, scheduler, cfg, steps, fps, imageTimeout, videoTimeout } = options;
+  const { url, workflowDir, checkpoint, negative, negativeVideo, denoise, sampler, scheduler, cfg, steps, detailPass, fps, imageTimeout, videoTimeout } = options;
 
   function call(pathname, init) {
     return request(`${url}${pathname}`, init, 'ComfyUI');
@@ -143,8 +161,9 @@ function createComfy(options) {
     return { buffer: Buffer.from(await response.arrayBuffer()), mimeType };
   }
 
-  async function run(name, values, timeoutMs, wanted) {
-    const workflow = fill(loadWorkflow(name), values);
+  async function run(name, values, timeoutMs, wanted, transform) {
+    const filled = fill(loadWorkflow(name), values);
+    const workflow = transform ? transform(filled) : filled;
     const response = await call('/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -212,12 +231,12 @@ function createComfy(options) {
       }
     },
 
-    async generateImage({ prompt, image, aspectRatio }) {
+    async generateImage({ prompt, image, aspectRatio, detail }) {
       const [width, height] = IMAGE_SIZES[aspectRatio] || IMAGE_SIZES['1:1'];
       const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise, SAMPLER: sampler, SCHEDULER: scheduler, CFG: cfg, STEPS: steps };
       if (image) values.IMAGE = await upload(image);
       const name = image ? WORKFLOWS.image.reference : WORKFLOWS.image.text;
-      return run(name, values, imageTimeout, 'image/');
+      return run(name, values, imageTimeout, 'image/', detail ? workflow => addDetailPass(workflow, detailPass) : null);
     },
 
     async generateVideo({ prompt, image, aspectRatio, seconds }) {

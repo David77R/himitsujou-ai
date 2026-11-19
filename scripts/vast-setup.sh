@@ -18,7 +18,8 @@ COMFY_SCHEDULER=karras
 COMFY_CFG=6.5
 COMFY_STEPS=30
 COMFY_NEGATIVE=blurry, low quality, deformed, bad anatomy, extra fingers, watermark, signature, text, child, underage
-PROMPT_SUFFIX="
+PROMPT_SUFFIX=
+ENHANCE_STYLE=natural"
     ;;
   anime)
     profile_url="https://huggingface.co/cagliostrolab/animagine-xl-4.0/resolve/main/animagine-xl-4.0-opt.safetensors"
@@ -27,7 +28,8 @@ COMFY_SCHEDULER=normal
 COMFY_CFG=5
 COMFY_STEPS=28
 COMFY_NEGATIVE=lowres, bad anatomy, bad hands, missing fingers, extra digits, text, error, signature, watermark, username, cropped, blurry, worst quality, low score, child, underage
-PROMPT_SUFFIX=masterpiece, high score, great score, absurdres"
+PROMPT_SUFFIX=masterpiece, high score, great score, absurdres
+ENHANCE_STYLE=tags"
     ;;
   *)
     printf '\033[1;31mMODEL_PROFILE debe ser realista o anime.\033[0m\n'

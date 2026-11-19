@@ -212,7 +212,8 @@
       gap: 8px;
     }
 
-    .row input {
+    .row input,
+    .row select {
       flex: 1;
       min-width: 0;
     }
@@ -725,9 +726,12 @@
 
         <div class="field" id="story-field">
           <span class="field-label">Historia</span>
-          <select id="story-select">
-            <option value="">Nueva historia</option>
-          </select>
+          <div class="row">
+            <select id="story-select">
+              <option value="">Nueva historia</option>
+            </select>
+            <button type="button" class="secondary" id="story-delete" hidden>Borrar</button>
+          </div>
 
           <details class="characters" id="character-block">
             <summary class="field-label">Protagonista</summary>
@@ -1313,6 +1317,7 @@
       $('prompt-label').textContent = continuing ? `¿Qué pasa en el capítulo ${Number(count) + 1}?` : copy.story.label;
       promptInput.placeholder = continuing ? 'Déjalo vacío y sigue por donde quiera, o dile hacia dónde llevarlo' : copy.story.placeholder;
       $('character-block').open = !continuing && $('character-sheet').value === '';
+      $('story-delete').hidden = !continuing;
       if (state.mode === 'story' && !state.busy) submitButton.textContent = continuing ? 'Escribir capítulo' : copy.story.submit;
     }
 
@@ -1438,6 +1443,26 @@
     });
 
     $('story-select').addEventListener('change', event => selectStory(event.target.value));
+
+    $('story-delete').addEventListener('click', async () => {
+      const select = $('story-select');
+      const name = select.options[select.selectedIndex].text;
+      if (!state.storyId || !confirm(`¿Borrar "${name}"? No se puede deshacer.`)) return;
+      const button = $('story-delete');
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/stories/${state.storyId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(await readError(response));
+        state.storyId = '';
+        $('character-sheet').value = '';
+        $('story-tags').value = '';
+        await loadStories();
+      } catch (error) {
+        showNotice(error.message || 'No se pudo borrar la historia.');
+      } finally {
+        button.disabled = false;
+      }
+    });
 
     $('character-build').addEventListener('click', async () => {
       const idea = $('character-idea').value.trim();

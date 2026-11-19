@@ -267,6 +267,7 @@ async function handleStory(req, res) {
   let written = '';
   let started = false;
   let notice = null;
+  let disconnected = false;
   try {
     for await (const chunk of text.streamStory({ system: STORY_INSTRUCTIONS, prompt, image, signal: controller.signal })) {
       if (!started) {
@@ -277,12 +278,12 @@ async function handleStory(req, res) {
       res.write(chunk);
     }
   } catch (error) {
-    if (controller.signal.aborted) return;
-    if (!started) throw error;
-    notice = error.message || 'La conexión con el modelo se cortó.';
+    if (controller.signal.aborted) disconnected = true;
+    else if (!started) throw error;
+    else notice = error.message || 'La conexión con el modelo se cortó.';
   }
 
-  if (!started) throw new HttpError(502, 'El modelo no devolvió ninguna historia. Intenta de nuevo.');
+  if (!started && !disconnected) throw new HttpError(502, 'El modelo no devolvió ninguna historia. Intenta de nuevo.');
 
   const chapterText = written.trim();
   if (chapterText) {
@@ -302,9 +303,16 @@ async function handleStory(req, res) {
       console.error('No se pudo guardar la historia:', error.message);
     }
   }
+  if (!story.chapters.length && !existing) stories.remove(story.id);
+  if (disconnected) return res.end();
   if (notice) res.write(`${STREAM_ERROR}${notice}. El capítulo se guardó hasta donde llegó.`);
   res.write(`${STREAM_META}${JSON.stringify({ storyId: story.id, title: story.title, chapter: story.chapters.length })}`);
   res.end();
+}
+
+function handleStoryDelete(req, res, id) {
+  if (!stories.remove(id)) throw new HttpError(404, 'Esa historia ya no existe.');
+  sendJson(res, 200, { deleted: id });
 }
 
 async function handleCharacter(req, res) {
@@ -454,6 +462,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const route = routes[`${req.method} ${pathname}`];
     if (route) return await route(req, res);
+    if (req.method === 'DELETE' && pathname.startsWith('/api/stories/')) return handleStoryDelete(req, res, pathname.slice('/api/stories/'.length));
     if (req.method !== 'GET') return sendJson(res, 405, { error: 'Método no permitido.' });
     if (pathname.startsWith('/api/jobs/')) return handleJob(req, res, pathname.slice('/api/jobs/'.length));
     if (pathname.startsWith('/api/stories/')) return handleStoryRead(req, res, pathname.slice('/api/stories/'.length));

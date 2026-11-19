@@ -1,0 +1,13 @@
+{
+  "name": "himitsujou-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Estudio local para generar historias e imágenes a partir de un prompt o una imagen",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

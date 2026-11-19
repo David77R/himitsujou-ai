@@ -1,0 +1,363 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { HttpError, MIME_BY_EXT, EXT_BY_MIME, loadEnv } = require('./lib/core');
+const { createGemini } = require('./providers/gemini');
+const { createOllama } = require('./providers/ollama');
+const { createComfy, IMAGE_SIZES, VIDEO_SIZES } = require('./providers/comfyui');
+
+const ROOT = __dirname;
+loadEnv(ROOT);
+
+const env = (key, fallback) => process.env[key] === undefined || process.env[key] === '' ? fallback : process.env[key];
+
+const config = {
+  host: env('HOST', '127.0.0.1'),
+  port: Number(env('PORT', 3000)),
+  password: env('APP_PASSWORD', ''),
+  outputDir: path.resolve(ROOT, env('OUTPUT_DIR', 'creaciones')),
+  textProvider: env('TEXT_PROVIDER', 'gemini').toLowerCase(),
+  imageProvider: env('IMAGE_PROVIDER', 'gemini').toLowerCase(),
+  enhancePrompts: env('ENHANCE_PROMPTS', 'true').toLowerCase() !== 'false'
+};
+
+const gemini = createGemini({
+  apiKey: env('GEMINI_API_KEY', ''),
+  textModel: env('TEXT_MODEL', 'gemini-2.5-flash'),
+  imageModel: env('IMAGE_MODEL', 'gemini-2.5-flash-image')
+});
+
+const ollama = createOllama({
+  url: env('OLLAMA_URL', 'http://127.0.0.1:11434').replace(/\/+$/, ''),
+  model: env('OLLAMA_MODEL', 'llama3.1:8b')
+});
+
+const comfy = createComfy({
+  url: env('COMFY_URL', 'http://127.0.0.1:8188').replace(/\/+$/, ''),
+  workflowDir: path.join(ROOT, 'workflows'),
+  checkpoint: env('COMFY_CHECKPOINT', 'sd_xl_base_1.0.safetensors'),
+  negative: env('COMFY_NEGATIVE', 'blurry, low quality, deformed, bad anatomy, extra fingers, watermark, signature, text'),
+  negativeVideo: env('COMFY_NEGATIVE_VIDEO', 'blurry, low quality, static, distorted, deformed, watermark, text, jittery'),
+  denoise: Number(env('COMFY_DENOISE', 0.65)),
+  fps: Number(env('COMFY_FPS', 24)),
+  imageTimeout: Number(env('COMFY_IMAGE_TIMEOUT', 600)) * 1000,
+  videoTimeout: Number(env('COMFY_VIDEO_TIMEOUT', 1800)) * 1000
+});
+
+const TEXT_PROVIDERS = { gemini, ollama };
+const IMAGE_PROVIDERS = { gemini, comfyui: comfy };
+const text = TEXT_PROVIDERS[config.textProvider];
+const images = IMAGE_PROVIDERS[config.imageProvider];
+
+if (!text) {
+  console.error(`TEXT_PROVIDER debe ser gemini u ollama (recibido: ${config.textProvider}).`);
+  process.exit(1);
+}
+
+if (!images) {
+  console.error(`IMAGE_PROVIDER debe ser gemini o comfyui (recibido: ${config.imageProvider}).`);
+  process.exit(1);
+}
+
+if (!['127.0.0.1', 'localhost', '::1'].includes(config.host) && !config.password) {
+  console.error('El servidor está abierto a la red (HOST) y no tiene APP_PASSWORD. Define una contraseña en .env antes de iniciarlo.');
+  process.exit(1);
+}
+
+const PUBLIC_DIR = path.join(ROOT, 'public');
+const MAX_BODY = 20 * 1024 * 1024;
+const STREAM_ERROR = '\u0000';
+const JOB_TTL = 2 * 60 * 60 * 1000;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const VIDEO_SECONDS = [3, 5];
+
+const LENGTHS = {
+  corta: 'entre 300 y 500 palabras',
+  media: 'entre 800 y 1200 palabras',
+  larga: 'entre 1800 y 2500 palabras'
+};
+
+const STORY_INSTRUCTIONS = [
+  'Escribes historias originales de ficción para adultos con voz propia, imágenes concretas y diálogos naturales.',
+  'Responde en el mismo idioma en que esté escrita la petición.',
+  'La primera línea es solo el título, sin comillas, símbolos ni formato markdown.',
+  'Después escribe la historia en párrafos separados por una línea en blanco, sin encabezados ni listas.',
+  'Si recibes una imagen, úsala como inspiración principal para personajes, ambiente y tono.'
+].join(' ');
+
+const ENHANCERS = {
+  image: 'Rewrite the user idea as one English prompt for an image diffusion model: comma-separated, concrete visual details (subject, setting, lighting, style, composition, quality). Keep every element the user asked for and do not add or remove content. Reply with the prompt only.',
+  video: 'Rewrite the user idea as one English paragraph for a video diffusion model, describing the subject, its motion, camera movement, setting, lighting and style. Keep every element the user asked for and do not add or remove content. Reply with the prompt only.'
+};
+
+const jobs = new Map();
+
+function sendJson(res, status, data) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(data));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let tooLarge = false;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY) {
+        tooLarge = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (tooLarge) return reject(new HttpError(413, 'La imagen es demasiado grande. Prueba con una de menos de 15 MB.'));
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+      } catch {
+        reject(new HttpError(400, 'La solicitud no tiene un formato válido.'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function parseImage(image) {
+  if (!image) return null;
+  if (!IMAGE_TYPES.includes(image.mimeType) || typeof image.data !== 'string' || !image.data) {
+    throw new HttpError(400, 'Formato de imagen no admitido. Usa JPG, PNG o WebP.');
+  }
+  return { mimeType: image.mimeType, data: image.data };
+}
+
+function cleanPrompt(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function timestamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+function saveCreation(prefix, extension, content) {
+  fs.mkdirSync(config.outputDir, { recursive: true });
+  const name = `${prefix}-${timestamp()}-${crypto.randomBytes(2).toString('hex')}.${extension}`;
+  fs.writeFileSync(path.join(config.outputDir, name), content);
+  return name;
+}
+
+async function enhance(kind, prompt) {
+  if (!config.enhancePrompts || !prompt || (kind === 'image' && images !== comfy)) return prompt;
+  try {
+    const result = await text.complete({ system: ENHANCERS[kind], prompt });
+    return result.replace(/^["'\s]+|["'\s]+$/g, '') || prompt;
+  } catch (error) {
+    console.warn(`No se pudo mejorar el prompt (${error.message}). Se usa el original.`);
+    return prompt;
+  }
+}
+
+function publicJob(job) {
+  return {
+    id: job.id,
+    kind: job.kind,
+    status: job.status,
+    elapsed: Math.round(((job.finishedAt || Date.now()) - job.createdAt) / 1000),
+    result: job.result,
+    error: job.error
+  };
+}
+
+function startJob(kind, task) {
+  const job = { id: crypto.randomUUID(), kind, status: 'running', createdAt: Date.now() };
+  jobs.set(job.id, job);
+  task()
+    .then(({ buffer, mimeType, prompt, note }) => {
+      const file = saveCreation(kind === 'video' ? 'video' : 'imagen', EXT_BY_MIME[mimeType] || 'bin', buffer);
+      job.result = { url: `/creaciones/${encodeURIComponent(file)}`, file, mimeType, prompt, note };
+      job.status = 'done';
+    })
+    .catch(error => {
+      if (!(error instanceof HttpError)) console.error(error);
+      job.error = error.message || 'Error inesperado del servidor.';
+      job.status = 'error';
+    })
+    .finally(() => {
+      job.finishedAt = Date.now();
+    });
+  return job;
+}
+
+setInterval(() => {
+  const limit = Date.now() - JOB_TTL;
+  for (const [id, job] of jobs) if (job.createdAt < limit) jobs.delete(id);
+}, 10 * 60 * 1000).unref();
+
+async function handleStory(req, res) {
+  const body = await readBody(req);
+  const image = parseImage(body.image);
+  const length = LENGTHS[body.length] || LENGTHS.media;
+  let prompt = cleanPrompt(body.prompt);
+  if (!prompt && !image) throw new HttpError(400, 'Escribe una idea o sube una imagen para empezar.');
+  if (!prompt) prompt = 'Escribe una historia inspirada en esta imagen.';
+
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort();
+  });
+
+  let story = '';
+  let started = false;
+  let notice = null;
+  try {
+    for await (const chunk of text.streamStory({ system: STORY_INSTRUCTIONS, prompt: `${prompt}\n\nExtensión: ${length}.`, image, signal: controller.signal })) {
+      if (!started) {
+        started = true;
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+      }
+      story += chunk;
+      res.write(chunk);
+    }
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    if (!started) throw error;
+    notice = error.message || 'La conexión con el modelo se cortó.';
+  }
+
+  if (!started) throw new HttpError(502, 'El modelo no devolvió ninguna historia. Intenta de nuevo.');
+  if (story.trim()) {
+    try {
+      saveCreation('historia', 'txt', story.trim());
+    } catch (error) {
+      console.error('No se pudo guardar la historia:', error.message);
+    }
+  }
+  if (notice) res.write(`${STREAM_ERROR}${notice}`);
+  res.end();
+}
+
+async function handleImage(req, res) {
+  const body = await readBody(req);
+  const image = parseImage(body.image);
+  const aspectRatio = body.aspectRatio in IMAGE_SIZES ? body.aspectRatio : '1:1';
+  const original = cleanPrompt(body.prompt);
+  if (!original && !image) throw new HttpError(400, 'Describe la imagen o escena que quieres crear.');
+  const job = startJob('image', async () => {
+    const prompt = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
+    const result = await images.generateImage({ prompt, image, aspectRatio });
+    return { ...result, prompt: prompt !== original ? prompt : undefined };
+  });
+  sendJson(res, 202, publicJob(job));
+}
+
+async function handleVideo(req, res) {
+  const body = await readBody(req);
+  const image = parseImage(body.image);
+  const aspectRatio = body.aspectRatio in VIDEO_SIZES ? body.aspectRatio : '16:9';
+  const seconds = VIDEO_SECONDS.includes(Number(body.seconds)) ? Number(body.seconds) : 5;
+  const original = cleanPrompt(body.prompt);
+  if (!original && !image) throw new HttpError(400, 'Describe la escena que quieres animar o sube una imagen.');
+  const job = startJob('video', async () => {
+    const prompt = original ? await enhance('video', original) : 'natural subtle motion, gentle camera movement, cinematic lighting';
+    const result = await comfy.generateVideo({ prompt, image, aspectRatio, seconds });
+    return { ...result, prompt: prompt !== original ? prompt : undefined };
+  });
+  sendJson(res, 202, publicJob(job));
+}
+
+function handleJob(req, res, id) {
+  const job = jobs.get(id);
+  if (!job) throw new HttpError(404, 'Ese trabajo ya no existe. Puede que el servidor se haya reiniciado; revisa la carpeta creaciones.');
+  sendJson(res, 200, publicJob(job));
+}
+
+async function handleStatus(req, res) {
+  const [story, image, video] = await Promise.all([text.status('story'), images.status('image'), comfy.status('video')]);
+  sendJson(res, 200, { story, image, video });
+}
+
+function streamFile(req, res, file, type) {
+  fs.stat(file, (error, stat) => {
+    if (error || !stat.isFile()) return sendJson(res, 404, { error: 'No encontrado.' });
+    const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes' };
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (!range) {
+      res.writeHead(200, { ...headers, 'Content-Length': stat.size });
+      return fs.createReadStream(file).pipe(res);
+    }
+    let start = range[1] === '' ? stat.size - Number(range[2]) : Number(range[1]);
+    let end = range[1] === '' || range[2] === '' ? stat.size - 1 : Math.min(Number(range[2]), stat.size - 1);
+    if (range[1] === '' && range[2] === '' || start < 0 || start > end || start >= stat.size) {
+      res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+      return res.end();
+    }
+    res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Content-Length': end - start + 1 });
+    fs.createReadStream(file, { start, end }).pipe(res);
+  });
+}
+
+function serveCreation(req, res, name) {
+  if (!/^[\w.-]+$/.test(name)) return sendJson(res, 404, { error: 'No encontrado.' });
+  const file = path.join(config.outputDir, name);
+  streamFile(req, res, file, MIME_BY_EXT[path.extname(name).toLowerCase()] || 'application/octet-stream');
+}
+
+function serveStatic(req, res, pathname) {
+  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const file = path.resolve(PUBLIC_DIR, relative);
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) return sendJson(res, 404, { error: 'No encontrado.' });
+  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+  streamFile(req, res, file, types[path.extname(file)] || MIME_BY_EXT[path.extname(file)] || 'application/octet-stream');
+}
+
+function authorized(req) {
+  if (!config.password) return true;
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Basic ')) return false;
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  const supplied = decoded.slice(decoded.indexOf(':') + 1);
+  const digest = value => crypto.createHash('sha256').update(value).digest();
+  return crypto.timingSafeEqual(digest(supplied), digest(config.password));
+}
+
+const routes = {
+  'POST /api/story': handleStory,
+  'POST /api/image': handleImage,
+  'POST /api/video': handleVideo,
+  'GET /api/status': handleStatus
+};
+
+const server = http.createServer(async (req, res) => {
+  if (!authorized(req)) {
+    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Estudio", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Se necesita la contraseña del Estudio.');
+  }
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  } catch {
+    return sendJson(res, 400, { error: 'Ruta no válida.' });
+  }
+  try {
+    const route = routes[`${req.method} ${pathname}`];
+    if (route) return await route(req, res);
+    if (req.method !== 'GET') return sendJson(res, 405, { error: 'Método no permitido.' });
+    if (pathname.startsWith('/api/jobs/')) return handleJob(req, res, pathname.slice('/api/jobs/'.length));
+    if (pathname.startsWith('/creaciones/')) return serveCreation(req, res, pathname.slice('/creaciones/'.length));
+    serveStatic(req, res, pathname);
+  } catch (error) {
+    const status = error instanceof HttpError ? error.status : 500;
+    if (status === 500) console.error(error);
+    if (res.headersSent) return res.end();
+    sendJson(res, status, { error: error.message || 'Error inesperado del servidor.' });
+  }
+});
+
+server.listen(config.port, config.host, () => {
+  const shown = config.host === '0.0.0.0' ? 'localhost' : config.host;
+  console.log(`Estudio listo en http://${shown}:${config.port}`);
+  console.log(`Historias: ${config.textProvider} · Imágenes: ${config.imageProvider} · Video: comfyui`);
+  if (config.password) console.log('Protegido con contraseña.');
+});

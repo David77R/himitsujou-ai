@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estudio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #eef0f3;
+      --surface: #ffffff;
+      --ink: #23262d;
+      --graphite: #646a75;
+      --line: #d6dae1;
+      --blue: #3557e0;
+      --blue-soft: #e3e8fc;
+      --on-blue: #ffffff;
+      --danger: #b4232f;
+      --danger-soft: #fbe7e9;
+      --radius-lg: 14px;
+      --radius-sm: 8px;
+      --ui: "Bricolage Grotesque", system-ui, sans-serif;
+      --read: "Literata", Georgia, serif;
+      color-scheme: light;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #191b20;
+        --surface: #22252b;
+        --ink: #e8eaee;
+        --graphite: #9aa0aa;
+        --line: #353941;
+        --blue: #8098ff;
+        --blue-soft: #283152;
+        --on-blue: #10131c;
+        --danger: #ff8a93;
+        --danger-soft: #3a2226;
+        color-scheme: dark;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--ui);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    .app {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 28px 24px 48px;
+    }
+
+    .masthead {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .masthead h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .masthead p {
+      margin: 0;
+      color: var(--graphite);
+      font-size: 0.9rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 380px) 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .composer {
+      position: sticky;
+      top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .switch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      padding: 4px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+    }
+
+    .switch button {
+      padding: 10px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .switch button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-weight: 500;
+    }
+
+    textarea {
+      min-height: 168px;
+      padding: 14px 16px;
+      resize: vertical;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      line-height: 1.55;
+    }
+
+    textarea::placeholder {
+      color: var(--graphite);
+    }
+
+    .hint {
+      color: var(--graphite);
+      font-size: 0.82rem;
+    }
+
+    .drop {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 76px;
+      padding: 12px 14px;
+      border: 1.5px dashed var(--line);
+      border-radius: var(--radius-lg);
+      color: var(--graphite);
+      cursor: pointer;
+    }
+
+    .drop:hover,
+    .drop.is-over {
+      border-color: var(--blue);
+      color: var(--ink);
+    }
+
+    .drop input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .drop img {
+      width: 52px;
+      height: 52px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+    }
+
+    .drop-text {
+      flex: 1;
+      font-size: 0.92rem;
+    }
+
+    .drop .remove {
+      position: relative;
+      z-index: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chips + .field-label {
+      margin-top: 10px;
+    }
+
+    .chips button {
+      padding: 7px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .chips button[aria-pressed="true"] {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 500;
+    }
+
+    .primary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border: 0;
+      border-radius: var(--radius-lg);
+      background: var(--blue);
+      color: var(--on-blue);
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .primary.is-stop {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .notice {
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: 0.9rem;
+    }
+
+    .sheet {
+      position: relative;
+      min-height: 560px;
+      padding: 48px 56px 40px 72px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px var(--radius-lg) var(--radius-lg) 4px;
+      background-image: linear-gradient(to right, transparent 47px, var(--blue-soft) 47px, var(--blue-soft) 49px, transparent 49px);
+    }
+
+    .empty {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 460px;
+      max-width: 440px;
+      color: var(--graphite);
+    }
+
+    .empty h2 {
+      margin: 0 0 8px;
+      color: var(--ink);
+      font-family: var(--read);
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+
+    .empty p {
+      margin: 0;
+    }
+
+    .story {
+      max-width: 66ch;
+      font-family: var(--read);
+      font-size: 1.12rem;
+      line-height: 1.75;
+    }
+
+    .story h2 {
+      margin: 0 0 28px;
+      font-size: 2.1rem;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+
+    .story p {
+      margin: 0 0 1.1em;
+    }
+
+    .story.is-writing p:last-child::after {
+      content: "";
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      background: var(--blue);
+      animation: blink 1s steps(2) infinite;
+    }
+
+    .figure {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 0;
+    }
+
+    .figure img,
+    .figure video {
+      display: block;
+      max-width: 100%;
+      max-height: 72vh;
+      margin: 0 auto;
+      border-radius: var(--radius-sm);
+    }
+
+    .figure p {
+      margin: 0;
+      color: var(--graphite);
+      font-family: var(--read);
+      font-style: italic;
+    }
+
+    .sketching {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 18px;
+      min-height: 460px;
+      color: var(--graphite);
+    }
+
+    .sketching svg {
+      width: 220px;
+      height: auto;
+    }
+
+    .sketching p {
+      margin: 0;
+      max-width: 44ch;
+    }
+
+    .sketching .elapsed {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .notice.is-info {
+      background: var(--blue-soft);
+      color: var(--ink);
+    }
+
+    .sketching path {
+      fill: none;
+      stroke: var(--blue);
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-dasharray: 520;
+      stroke-dashoffset: 520;
+      animation: draw 2.4s ease-in-out infinite;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      font-family: var(--ui);
+    }
+
+    .actions button,
+    .actions a {
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: inherit;
+      font-size: 0.9rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .actions button:hover,
+    .actions a:hover {
+      border-color: var(--ink);
+    }
+
+    .actions .saved {
+      margin-left: auto;
+      color: var(--graphite);
+      font-size: 0.82rem;
+    }
+
+    .history {
+      margin-top: 28px;
+    }
+
+    .history h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .history ol {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .history button {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .history button[aria-current="true"] {
+      border-color: var(--blue);
+    }
+
+    .history img,
+    .history video {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+    }
+
+    .history .excerpt {
+      aspect-ratio: 4 / 3;
+      padding: 12px;
+      overflow: hidden;
+      color: var(--graphite);
+      font-family: var(--read);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .history .caption {
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    @keyframes blink {
+      to {
+        opacity: 0;
+      }
+    }
+
+    @keyframes draw {
+      0% {
+        stroke-dashoffset: 520;
+      }
+      60% {
+        stroke-dashoffset: 0;
+      }
+      100% {
+        stroke-dashoffset: 0;
+        opacity: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sketching path {
+        animation: none;
+        stroke-dashoffset: 0;
+      }
+
+      .story.is-writing p:last-child::after {
+        animation: none;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        padding: 20px 16px 40px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .composer {
+        position: static;
+      }
+
+      .sheet {
+        min-height: 360px;
+        padding: 28px 20px 24px 36px;
+        background-image: linear-gradient(to right, transparent 19px, var(--blue-soft) 19px, var(--blue-soft) 21px, transparent 21px);
+      }
+
+      .empty,
+      .sketching {
+        min-height: 280px;
+      }
+
+      .story h2 {
+        font-size: 1.6rem;
+      }
+
+      .masthead p {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="masthead">
+      <h1>Estudio</h1>
+      <p id="models"></p>
+    </header>
+
+    <div class="layout">
+      <form class="composer" id="composer" novalidate>
+        <div class="switch" role="group" aria-label="Qué quieres crear">
+          <button type="button" data-mode="story" aria-pressed="true">Historia</button>
+          <button type="button" data-mode="image" aria-pressed="false">Imagen</button>
+          <button type="button" data-mode="video" aria-pressed="false">Video</button>
+        </div>
+
+        <label class="field">
+          <span class="field-label" id="prompt-label">¿Qué historia quieres leer?</span>
+          <textarea id="prompt" placeholder="Una kitsune que trabaja de noche en una tienda 24 horas de Osaka y un cliente que siempre paga con monedas antiguas"></textarea>
+          <span class="hint">Ctrl + Enter para crear</span>
+        </label>
+
+        <div class="field">
+          <span class="field-label">Imagen de referencia</span>
+          <label class="drop" id="drop">
+            <input type="file" id="file" accept="image/png,image/jpeg,image/webp">
+            <img id="preview" alt="" hidden>
+            <span class="drop-text" id="drop-text">Opcional. Arrastra una imagen o haz clic para elegirla.</span>
+            <button type="button" class="remove" id="remove" hidden>Quitar</button>
+          </label>
+        </div>
+
+        <div class="field" id="length-field">
+          <span class="field-label">Extensión</span>
+          <div class="chips" data-option="length">
+            <button type="button" data-value="corta" aria-pressed="false">Corta</button>
+            <button type="button" data-value="media" aria-pressed="true">Media</button>
+            <button type="button" data-value="larga" aria-pressed="false">Larga</button>
+          </div>
+        </div>
+
+        <div class="field" id="ratio-field" hidden>
+          <span class="field-label">Formato</span>
+          <div class="chips" data-option="aspectRatio">
+            <button type="button" data-value="1:1" aria-pressed="true">Cuadrado</button>
+            <button type="button" data-value="16:9" aria-pressed="false">Horizontal</button>
+            <button type="button" data-value="9:16" aria-pressed="false">Vertical</button>
+            <button type="button" data-value="4:3" aria-pressed="false">4:3</button>
+            <button type="button" data-value="3:4" aria-pressed="false">3:4</button>
+          </div>
+        </div>
+
+        <div class="field" id="video-field" hidden>
+          <span class="field-label">Formato</span>
+          <div class="chips" data-option="videoRatio">
+            <button type="button" data-value="16:9" aria-pressed="true">Horizontal</button>
+            <button type="button" data-value="9:16" aria-pressed="false">Vertical</button>
+            <button type="button" data-value="1:1" aria-pressed="false">Cuadrado</button>
+          </div>
+          <span class="field-label">Duración</span>
+          <div class="chips" data-option="seconds">
+            <button type="button" data-value="3" aria-pressed="false">3 segundos</button>
+            <button type="button" data-value="5" aria-pressed="true">5 segundos</button>
+          </div>
+        </div>
+
+        <div class="notice" id="setup" hidden></div>
+
+        <button type="submit" class="primary" id="submit">Escribir historia</button>
+      </form>
+
+      <main>
+        <section class="sheet" id="sheet" aria-live="polite">
+          <div class="empty" id="empty">
+            <h2>La hoja está en blanco</h2>
+            <p>Escribe una idea, sube una imagen de referencia o ambas cosas. Lo que crees se guarda también en la carpeta creaciones.</p>
+          </div>
+        </section>
+
+        <section class="history" id="history" hidden>
+          <h2>En esta sesión</h2>
+          <ol id="history-list"></ol>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const STREAM_ERROR = '\u0000';
+    const MAX_SIDE = 1536;
+    const POLL_MS = 2000;
+
+    const state = {
+      mode: 'story',
+      options: { length: 'media', aspectRatio: '1:1', videoRatio: '16:9', seconds: '5' },
+      image: null,
+      busy: false,
+      controller: null,
+      status: null,
+      history: [],
+      current: null
+    };
+
+    const copy = {
+      story: {
+        label: '¿Qué historia quieres leer?',
+        placeholder: 'Una kitsune que trabaja de noche en una tienda 24 horas de Osaka y un cliente que siempre paga con monedas antiguas',
+        submit: 'Escribir historia',
+        busy: 'Detener',
+        drop: 'Opcional. Arrastra una imagen o haz clic para elegirla.'
+      },
+      image: {
+        label: '¿Qué quieres ver?',
+        placeholder: 'Un callejón de Tokio bajo la lluvia al anochecer, letreros de neón reflejados en el asfalto, estilo ilustración a lápiz con acuarela',
+        submit: 'Generar imagen',
+        busy: 'Dibujando…',
+        drop: 'Opcional. La imagen generada partirá de esta.',
+        waiting: 'Dibujando tu imagen. Suele tardar menos de un minuto.'
+      },
+      video: {
+        label: '¿Qué escena quieres animar?',
+        placeholder: 'Una figura con kimono camina despacio por un pasillo de madera iluminado por velas, la cámara la sigue desde atrás',
+        submit: 'Generar video',
+        busy: 'Animando…',
+        drop: 'Opcional. Será el primer cuadro del video.',
+        waiting: 'Animando tu escena. Puede tardar varios minutos; si cierras la página, el video igual se guarda en creaciones.'
+      }
+    };
+
+    const $ = id => document.getElementById(id);
+    const form = $('composer');
+    const promptInput = $('prompt');
+    const fileInput = $('file');
+    const drop = $('drop');
+    const preview = $('preview');
+    const dropText = $('drop-text');
+    const removeButton = $('remove');
+    const submitButton = $('submit');
+    const sheet = $('sheet');
+    const setup = $('setup');
+
+    function el(tag, props = {}, children = []) {
+      const node = document.createElement(tag);
+      Object.entries(props).forEach(([key, value]) => {
+        if (key === 'class') node.className = value;
+        else if (key === 'text') node.textContent = value;
+        else if (value === true) node.setAttribute(key, '');
+        else node.setAttribute(key, value);
+      });
+      children.forEach(child => node.append(child));
+      return node;
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function modeStatus() {
+      return state.status && state.status[state.mode];
+    }
+
+    function renderStatus() {
+      const status = modeStatus();
+      $('models').textContent = status ? `Motor: ${status.label}` : '';
+      setup.hidden = !status || status.ready;
+      setup.textContent = status && !status.ready ? status.detail : '';
+      if (!state.busy) submitButton.disabled = Boolean(status && !status.ready);
+    }
+
+    function setMode(mode) {
+      if (state.busy) return;
+      state.mode = mode;
+      document.querySelectorAll('[data-mode]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+      });
+      $('prompt-label').textContent = copy[mode].label;
+      promptInput.placeholder = copy[mode].placeholder;
+      submitButton.textContent = copy[mode].submit;
+      if (!state.image) dropText.textContent = copy[mode].drop;
+      $('length-field').hidden = mode !== 'story';
+      $('ratio-field').hidden = mode !== 'image';
+      $('video-field').hidden = mode !== 'video';
+      renderStatus();
+    }
+
+    function setBusy(busy) {
+      state.busy = busy;
+      const streaming = busy && state.mode === 'story';
+      submitButton.classList.toggle('is-stop', streaming);
+      submitButton.disabled = busy && !streaming;
+      submitButton.textContent = busy ? copy[state.mode].busy : copy[state.mode].submit;
+      if (!busy) renderStatus();
+    }
+
+    function showNotice(message) {
+      sheet.replaceChildren(el('div', { class: 'empty' }, [
+        el('h2', { text: 'No se pudo completar' }),
+        el('p', { text: message })
+      ]));
+    }
+
+    async function prepareImage(file) {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      return { mimeType: 'image/jpeg', data: dataUrl.split(',')[1], dataUrl, name: file.name };
+    }
+
+    async function setImage(file) {
+      if (!file) return;
+      if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+        dropText.textContent = 'Usa una imagen JPG, PNG o WebP.';
+        return;
+      }
+      dropText.textContent = 'Preparando imagen…';
+      try {
+        state.image = await prepareImage(file);
+        preview.src = state.image.dataUrl;
+        preview.hidden = false;
+        removeButton.hidden = false;
+        dropText.textContent = state.image.name;
+      } catch {
+        clearImage();
+        dropText.textContent = 'No se pudo leer esa imagen. Prueba con otra.';
+      }
+    }
+
+    function clearImage() {
+      state.image = null;
+      fileInput.value = '';
+      preview.hidden = true;
+      preview.removeAttribute('src');
+      removeButton.hidden = true;
+      dropText.textContent = copy[state.mode].drop;
+    }
+
+    function imagePayload() {
+      return state.image && { mimeType: state.image.mimeType, data: state.image.data };
+    }
+
+    function splitStory(text) {
+      const clean = text.replace(/\r/g, '').trimStart();
+      const breakAt = clean.indexOf('\n');
+      if (breakAt === -1) return { title: clean.trim(), paragraphs: [] };
+      return {
+        title: clean.slice(0, breakAt).replace(/^#+\s*/, '').replace(/\*\*/g, '').trim(),
+        paragraphs: clean.slice(breakAt + 1).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
+      };
+    }
+
+    function renderStory(text, writing) {
+      const { title, paragraphs } = splitStory(text);
+      const article = el('article', { class: writing ? 'story is-writing' : 'story' }, [
+        el('h2', { text: title || '…' }),
+        ...paragraphs.map(p => el('p', { text: p }))
+      ]);
+      if (!paragraphs.length && writing) article.append(el('p'));
+      return article;
+    }
+
+    function slug(text) {
+      return (text || 'creacion').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'creacion';
+    }
+
+    function storyActions(item) {
+      const copyButton = el('button', { type: 'button', text: 'Copiar' });
+      copyButton.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(item.text);
+          copyButton.textContent = 'Copiada';
+        } catch {
+          copyButton.textContent = 'No se pudo copiar';
+        }
+        setTimeout(() => { copyButton.textContent = 'Copiar'; }, 1600);
+      });
+      const download = el('a', { href: URL.createObjectURL(new Blob([item.text], { type: 'text/plain;charset=utf-8' })), download: `${slug(item.title)}.txt`, text: 'Descargar .txt' });
+      return el('div', { class: 'actions' }, [copyButton, download, el('span', { class: 'saved', text: item.notice || 'Guardada en creaciones' })]);
+    }
+
+    function mediaActions(item) {
+      const label = item.type === 'video' ? 'Descargar video' : 'Descargar imagen';
+      return el('div', { class: 'actions' }, [
+        el('a', { href: item.src, download: item.file, text: label }),
+        el('span', { class: 'saved', text: `Guardado como ${item.file}` })
+      ]);
+    }
+
+    function showItem(item) {
+      state.current = item;
+      if (item.type === 'story') {
+        sheet.replaceChildren(renderStory(item.text, false), storyActions(item));
+      } else {
+        const media = item.type === 'video'
+          ? el('video', { src: item.src, controls: true, loop: true, autoplay: true, muted: true, playsinline: true })
+          : el('img', { src: item.src, alt: item.title });
+        media.muted = true;
+        const figure = el('figure', { class: 'figure' }, [media]);
+        if (item.caption) figure.append(el('p', { text: item.caption }));
+        sheet.replaceChildren(figure, mediaActions(item));
+      }
+      renderHistory();
+    }
+
+    function renderHistory() {
+      $('history').hidden = state.history.length === 0;
+      $('history-list').replaceChildren(...state.history.map(item => {
+        const button = el('button', { type: 'button', 'aria-current': String(item === state.current) });
+        if (item.type === 'image') button.append(el('img', { src: item.src, alt: '' }));
+        else if (item.type === 'video') button.append(Object.assign(el('video', { src: `${item.src}#t=0.1`, playsinline: true, preload: 'metadata' }), { muted: true }));
+        else button.append(el('div', { class: 'excerpt', text: splitStory(item.text).paragraphs[0] || '' }));
+        button.append(el('span', { class: 'caption', text: item.title }));
+        button.addEventListener('click', () => { if (!state.busy) showItem(item); });
+        return el('li', {}, [button]);
+      }));
+    }
+
+    async function readError(response) {
+      try {
+        const data = await response.json();
+        return data.error || `Error ${response.status}`;
+      } catch {
+        return `Error ${response.status}`;
+      }
+    }
+
+    async function createStory(prompt) {
+      state.controller = new AbortController();
+      sheet.replaceChildren(renderStory('', true));
+      let text = '';
+      let notice = null;
+      try {
+        const response = await fetch('/api/story', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, length: state.options.length, image: imagePayload() }),
+          signal: state.controller.signal
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value, { stream: true });
+          const errorAt = text.indexOf(STREAM_ERROR);
+          sheet.replaceChildren(renderStory(errorAt === -1 ? text : text.slice(0, errorAt), true));
+        }
+        text += decoder.decode();
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          if (!text) return showNotice(error.message || 'No se pudo conectar con el servidor.');
+          notice = 'La historia se interrumpió';
+        } else {
+          if (!text) return showNotice('Detuviste la historia antes de que empezara.');
+          notice = 'Detenida antes de terminar';
+        }
+      }
+      const errorAt = text.indexOf(STREAM_ERROR);
+      if (errorAt !== -1) {
+        notice = text.slice(errorAt + 1);
+        text = text.slice(0, errorAt);
+      }
+      const item = { type: 'story', text: text.trim(), title: splitStory(text).title || 'Sin título', notice };
+      state.history.unshift(item);
+      showItem(item);
+    }
+
+    function formatElapsed(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    function showWaiting(mode) {
+      const waiting = el('div', { class: 'sketching' });
+      waiting.innerHTML = '<svg viewBox="0 0 220 120" aria-hidden="true"><path d="M8 96 C 40 20, 70 20, 92 70 S 140 118, 160 52 S 200 10, 212 40"/></svg>';
+      const elapsed = el('p', { class: 'elapsed', text: '0:00' });
+      waiting.append(el('p', { text: copy[mode].waiting }), elapsed);
+      sheet.replaceChildren(waiting);
+      const started = Date.now();
+      const timer = setInterval(() => {
+        elapsed.textContent = formatElapsed(Math.floor((Date.now() - started) / 1000));
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+
+    async function runJob(endpoint, payload) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      let job = await response.json();
+      let failures = 0;
+      while (job.status === 'running') {
+        await sleep(POLL_MS);
+        try {
+          const poll = await fetch(`/api/jobs/${job.id}`);
+          if (poll.status === 404) throw Object.assign(new Error(await readError(poll)), { fatal: true });
+          if (!poll.ok) throw new Error(await readError(poll));
+          job = await poll.json();
+          failures = 0;
+        } catch (error) {
+          failures += 1;
+          if (error.fatal) throw error;
+          if (failures >= 6) throw new Error('Se perdió la conexión con el servidor. Si el trabajo seguía en curso, se guardará igual en creaciones.');
+        }
+      }
+      if (job.status === 'error') throw new Error(job.error);
+      return job.result;
+    }
+
+    async function createMedia(mode, prompt) {
+      const stop = showWaiting(mode);
+      const payload = mode === 'video'
+        ? { prompt, aspectRatio: state.options.videoRatio, seconds: Number(state.options.seconds), image: imagePayload() }
+        : { prompt, aspectRatio: state.options.aspectRatio, image: imagePayload() };
+      try {
+        const result = await runJob(mode === 'video' ? '/api/video' : '/api/image', payload);
+        const item = {
+          type: mode,
+          src: result.url,
+          file: result.file,
+          caption: result.prompt ? `Prompt usado: ${result.prompt}` : result.note || '',
+          title: prompt || (mode === 'video' ? 'Video desde referencia' : 'Imagen desde referencia')
+        };
+        state.history.unshift(item);
+        showItem(item);
+      } catch (error) {
+        showNotice(error.message || 'No se pudo conectar con el servidor.');
+      } finally {
+        stop();
+      }
+    }
+
+    async function submit() {
+      if (state.busy) {
+        if (state.controller) state.controller.abort();
+        return;
+      }
+      const status = modeStatus();
+      if (status && !status.ready) return;
+      const prompt = promptInput.value.trim();
+      if (!prompt && !state.image) {
+        promptInput.focus();
+        return;
+      }
+      const mode = state.mode;
+      setBusy(true);
+      try {
+        if (mode === 'story') await createStory(prompt);
+        else await createMedia(mode, prompt);
+      } finally {
+        state.controller = null;
+        setBusy(false);
+      }
+    }
+
+    async function loadStatus() {
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) return;
+        state.status = await response.json();
+        renderStatus();
+      } catch {}
+    }
+
+    document.querySelectorAll('[data-mode]').forEach(button => {
+      button.addEventListener('click', () => setMode(button.dataset.mode));
+    });
+
+    document.querySelectorAll('[data-option]').forEach(group => {
+      group.addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        state.options[group.dataset.option] = button.dataset.value;
+        group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      });
+    });
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      submit();
+    });
+
+    promptInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        submit();
+      }
+    });
+
+    fileInput.addEventListener('change', () => setImage(fileInput.files[0]));
+
+    removeButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearImage();
+    });
+
+    ['dragenter', 'dragover'].forEach(type => drop.addEventListener(type, event => {
+      event.preventDefault();
+      drop.classList.add('is-over');
+    }));
+
+    ['dragleave', 'drop'].forEach(type => drop.addEventListener(type, event => {
+      event.preventDefault();
+      drop.classList.remove('is-over');
+    }));
+
+    drop.addEventListener('drop', event => setImage(event.dataTransfer.files[0]));
+
+    document.addEventListener('paste', event => {
+      const file = [...(event.clipboardData && event.clipboardData.files || [])].find(f => f.type.startsWith('image/'));
+      if (file) setImage(file);
+    });
+
+    window.addEventListener('focus', () => { if (!state.busy) loadStatus(); });
+
+    loadStatus();
+  </script>
+</body>
+</html>

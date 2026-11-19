@@ -255,9 +255,9 @@ function createComfy(options) {
       }
     },
 
-    async generateImage({ prompt, image, aspectRatio, detail, regions = [] }) {
+    async generateImage({ prompt, image, aspectRatio, detail, regions = [], fidelity = 0 }) {
       const [width, height] = IMAGE_SIZES[aspectRatio] || IMAGE_SIZES['1:1'];
-      const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise, SAMPLER: sampler, SCHEDULER: scheduler, CFG: cfg, STEPS: steps };
+      const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise, SAMPLER: sampler, SCHEDULER: scheduler, CFG: Math.min(12, Math.max(1, cfg + fidelity)), STEPS: steps };
       if (image) values.IMAGE = await upload(image);
       const name = image ? WORKFLOWS.image.reference : WORKFLOWS.image.text;
       return run(name, values, imageTimeout, 'image/', workflow => {

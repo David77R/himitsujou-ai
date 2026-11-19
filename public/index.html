@@ -631,6 +631,13 @@
             <button type="button" data-value="4:3" aria-pressed="false">4:3</button>
             <button type="button" data-value="3:4" aria-pressed="false">3:4</button>
           </div>
+          <span class="field-label">Fidelidad al texto</span>
+          <div class="chips" data-option="fidelity">
+            <button type="button" data-value="suelta" aria-pressed="false">Suelta</button>
+            <button type="button" data-value="normal" aria-pressed="true">Normal</button>
+            <button type="button" data-value="alta" aria-pressed="false">Alta</button>
+            <button type="button" data-value="maxima" aria-pressed="false">Máxima</button>
+          </div>
           <span class="field-label">Prompt</span>
           <div class="chips" data-option="promptMode">
             <button type="button" data-value="mejorado" aria-pressed="true">Mejorado</button>
@@ -685,7 +692,7 @@
 
     const state = {
       mode: 'story',
-      options: { length: 'media', aspectRatio: '1:1', detail: 'si', promptMode: 'mejorado', videoRatio: '16:9', seconds: '5' },
+      options: { length: 'media', aspectRatio: '1:1', detail: 'si', promptMode: 'mejorado', fidelity: 'normal', videoRatio: '16:9', seconds: '5' },
       image: null,
       busy: false,
       controller: null,
@@ -1021,6 +1028,7 @@
           aspectRatio: state.options.aspectRatio,
           detail: state.options.detail === 'si',
           raw: state.options.promptMode === 'tal-cual',
+          fidelity: state.options.fidelity,
           characters: [$('character-left').value.trim(), $('character-right').value.trim()],
           image: imagePayload()
         };

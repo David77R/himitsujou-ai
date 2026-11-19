@@ -105,6 +105,8 @@ const STORY_INSTRUCTIONS = [
   'Si recibes una imagen, úsala como inspiración principal para personajes, ambiente y tono.'
 ].join(' ');
 
+const FIDELITY = { suelta: -1.5, normal: 0, alta: 2, maxima: 3.5 };
+
 const ENHANCERS = {
   imageTags: 'Rewrite the user idea as Danbooru-style tags for an anime image diffusion model, separated by commas. Start with the subject count tag (1girl, 1boy, 2girls, 1other or no humans), then appearance, clothing, pose, action, setting, lighting, composition and art style. Use short tags, not sentences. Keep every element the user asked for and do not add or remove content. Reply with the tags only.',
   image: 'Rewrite the user idea as one English prompt for an image diffusion model: comma-separated, concrete visual details (subject, setting, lighting, style, composition, quality). Keep every element the user asked for and do not add or remove content. Reply with the prompt only.',
@@ -273,7 +275,8 @@ async function handleImage(req, res) {
     const prompt = !raw && images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
     const regions = images === comfy ? await Promise.all(characters.map(character => raw ? character : enhance('image', character))) : [];
     const sent = images === comfy ? prompt : [prompt, ...characters].join('. ');
-    const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions });
+    const fidelity = FIDELITY[body.fidelity] || 0;
+    const result = await images.generateImage({ prompt: sent, image, aspectRatio, detail: body.detail !== false, regions, fidelity });
     const used = regions.length ? `${prompt} | Izquierda: ${regions[0]} | Derecha: ${regions[1]}` : prompt;
     return { ...result, prompt: used !== original ? used : undefined };
   });

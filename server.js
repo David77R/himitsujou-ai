@@ -19,7 +19,8 @@ const config = {
   outputDir: path.resolve(ROOT, env('OUTPUT_DIR', 'creaciones')),
   textProvider: env('TEXT_PROVIDER', 'gemini').toLowerCase(),
   imageProvider: env('IMAGE_PROVIDER', 'gemini').toLowerCase(),
-  enhancePrompts: env('ENHANCE_PROMPTS', 'true').toLowerCase() !== 'false'
+  enhancePrompts: env('ENHANCE_PROMPTS', 'true').toLowerCase() !== 'false',
+  promptSuffix: env('PROMPT_SUFFIX', '')
 };
 
 const gemini = createGemini({
@@ -40,6 +41,10 @@ const comfy = createComfy({
   negative: env('COMFY_NEGATIVE', 'blurry, low quality, deformed, bad anatomy, extra fingers, watermark, signature, text'),
   negativeVideo: env('COMFY_NEGATIVE_VIDEO', 'blurry, low quality, static, distorted, deformed, watermark, text, jittery'),
   denoise: Number(env('COMFY_DENOISE', 0.65)),
+  sampler: env('COMFY_SAMPLER', 'dpmpp_2m'),
+  scheduler: env('COMFY_SCHEDULER', 'karras'),
+  cfg: Number(env('COMFY_CFG', 6.5)),
+  steps: Number(env('COMFY_STEPS', 30)),
   fps: Number(env('COMFY_FPS', 24)),
   imageTimeout: Number(env('COMFY_IMAGE_TIMEOUT', 600)) * 1000,
   videoTimeout: Number(env('COMFY_VIDEO_TIMEOUT', 1800)) * 1000
@@ -245,7 +250,8 @@ async function handleImage(req, res) {
   const original = cleanPrompt(body.prompt);
   if (!original && !image) throw new HttpError(400, 'Describe la imagen o escena que quieres crear.');
   const job = startJob('image', async () => {
-    const prompt = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
+    const base = original ? await enhance('image', original) : 'detailed expressive illustration based on the reference image';
+    const prompt = images === comfy && config.promptSuffix ? `${base}, ${config.promptSuffix}` : base;
     const result = await images.generateImage({ prompt, image, aspectRatio });
     return { ...result, prompt: prompt !== original ? prompt : undefined };
   });

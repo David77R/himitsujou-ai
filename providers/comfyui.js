@@ -71,7 +71,7 @@ async function rejection(response) {
 }
 
 function createComfy(options) {
-  const { url, workflowDir, checkpoint, negative, negativeVideo, denoise, fps, imageTimeout, videoTimeout } = options;
+  const { url, workflowDir, checkpoint, negative, negativeVideo, denoise, sampler, scheduler, cfg, steps, fps, imageTimeout, videoTimeout } = options;
 
   function call(pathname, init) {
     return request(`${url}${pathname}`, init, 'ComfyUI');
@@ -176,7 +176,7 @@ function createComfy(options) {
 
     async generateImage({ prompt, image, aspectRatio }) {
       const [width, height] = IMAGE_SIZES[aspectRatio] || IMAGE_SIZES['1:1'];
-      const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise };
+      const values = { PROMPT: prompt, NEGATIVE: negative, SEED: seed(), WIDTH: width, HEIGHT: height, CHECKPOINT: checkpoint, DENOISE: denoise, SAMPLER: sampler, SCHEDULER: scheduler, CFG: cfg, STEPS: steps };
       if (image) values.IMAGE = await upload(image);
       const name = image ? WORKFLOWS.image.reference : WORKFLOWS.image.text;
       return run(name, values, imageTimeout, 'image/');

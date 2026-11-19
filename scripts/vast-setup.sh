@@ -4,7 +4,32 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/workspace/himitsujou-ai}"
 REPO_URL="${REPO_URL:-https://github.com/David77R/himitsujou-ai.git}"
 COMFY_DIR="${COMFY_DIR:-/workspace/ComfyUI}"
-CHECKPOINT_URL="${CHECKPOINT_URL:-https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors}"
+MODEL_PROFILE="${MODEL_PROFILE:-realista}"
+case "$MODEL_PROFILE" in
+  realista)
+    profile_url="https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+    profile_settings="COMFY_SAMPLER=dpmpp_2m
+COMFY_SCHEDULER=karras
+COMFY_CFG=6.5
+COMFY_STEPS=30
+COMFY_NEGATIVE=blurry, low quality, deformed, bad anatomy, extra fingers, watermark, signature, text, child, underage
+PROMPT_SUFFIX="
+    ;;
+  anime)
+    profile_url="https://huggingface.co/cagliostrolab/animagine-xl-4.0/resolve/main/animagine-xl-4.0-opt.safetensors"
+    profile_settings="COMFY_SAMPLER=euler_ancestral
+COMFY_SCHEDULER=normal
+COMFY_CFG=5
+COMFY_STEPS=28
+COMFY_NEGATIVE=lowres, bad anatomy, bad hands, missing fingers, extra digits, text, error, signature, watermark, username, cropped, blurry, worst quality, low score, child, underage
+PROMPT_SUFFIX=masterpiece, high score, great score, absurdres"
+    ;;
+  *)
+    printf '\033[1;31mMODEL_PROFILE debe ser realista o anime.\033[0m\n'
+    exit 1
+    ;;
+esac
+CHECKPOINT_URL="${CHECKPOINT_URL:-$profile_url}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-dolphin3:8b}"
 PORT="${PORT:-3000}"
 NODE_MAJOR=22
@@ -94,6 +119,7 @@ OLLAMA_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=$OLLAMA_MODEL
 COMFY_URL=$comfy_url
 COMFY_CHECKPOINT=$checkpoint
+$profile_settings
 ENHANCE_PROMPTS=true
 EOF
 chmod 600 "$env_file"
@@ -105,6 +131,14 @@ for _ in $(seq 1 15); do curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break
 curl -s -o /dev/null "http://127.0.0.1:$PORT/" || fail "El Estudio no arrancó. Revisa /workspace/estudio.log."
 
 step "Abriendo el acceso público"
+existing=""
+if pgrep -f "cloudflared tunnel --url http://localhost:$PORT" >/dev/null; then
+  existing=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /workspace/tunnel.log 2>/dev/null | head -1 || true)
+fi
+if [ -n "$existing" ]; then
+  printf '\n\033[1;32mListo. Tu enlace sigue siendo el mismo:\n%s\033[0m\n' "$existing"
+  exit 0
+fi
 if command -v cloudflared >/dev/null; then
   pkill -f "cloudflared tunnel --url http://localhost:$PORT" 2>/dev/null || true
   nohup cloudflared tunnel --url "http://localhost:$PORT" >/workspace/tunnel.log 2>&1 &

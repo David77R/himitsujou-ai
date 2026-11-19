@@ -29,7 +29,7 @@ Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 
 3. Elige la contraseña cuando te la pida y abre el enlace que aparece al final.
 
-El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
+El script instala Node y Ollama, descarga el modelo de texto y el de imágenes, configura `.env` e inicia el Estudio. Se puede volver a ejecutar sin perder nada. Para cambiar de estilo de imagen, ejecútalo con `MODEL_PROFILE=anime` (Animagine XL 4.0) o `MODEL_PROFILE=realista` (Juggernaut XL, el predeterminado). Otras variables opcionales: `OLLAMA_MODEL`, `CHECKPOINT_URL`, `PORT`.
 
 ## Acceso desde otros dispositivos
 

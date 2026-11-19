@@ -85,6 +85,7 @@ step "Descargando el modelo de texto ($OLLAMA_MODEL)"
 ollama pull "$OLLAMA_MODEL"
 
 if command -v nvidia-smi >/dev/null; then
+  echo "Comprobando que Ollama use la GPU (carga el modelo, tarda 1 o 2 minutos)..."
   ollama run "$OLLAMA_MODEL" hola >/dev/null 2>&1 || true
   if ollama ps 2>/dev/null | grep -qi '100% CPU'; then
     echo "Ollama no está usando la GPU. Reinstalando para que la detecte."

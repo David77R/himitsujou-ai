@@ -324,6 +324,7 @@ async function handleStory(req, res) {
     } catch (error) {
       console.warn(`No se pudo resumir el capítulo (${error.message}).`);
     }
+    const stateBefore = story.state || '';
     try {
       const updated = await text.complete({
         system: ENHANCERS.state,
@@ -333,7 +334,7 @@ async function handleStory(req, res) {
     } catch (error) {
       console.warn(`No se pudo actualizar el estado de la historia (${error.message}).`);
     }
-    story.chapters.push({ title: heading, text: chapterText, summary, created: new Date().toISOString() });
+    story.chapters.push({ title: heading, text: chapterText, summary, stateBefore, created: new Date().toISOString() });
     if (story.chapters.length === 1) story.title = heading || 'Sin título';
     try {
       stories.save(story);
@@ -347,6 +348,20 @@ async function handleStory(req, res) {
   if (notice) res.write(`${STREAM_ERROR}${notice}. El capítulo se guardó hasta donde llegó.`);
   res.write(`${STREAM_META}${JSON.stringify({ storyId: story.id, title: story.title, chapter: story.chapters.length })}`);
   res.end();
+}
+
+function handleChapterDelete(req, res, id) {
+  const story = stories.read(id);
+  if (!story || !story.chapters.length) throw new HttpError(404, 'Esa historia no tiene capítulos que borrar.');
+  const removed = story.chapters.pop();
+  story.state = removed.stateBefore || '';
+  if (!story.chapters.length) story.title = 'Sin título';
+  stories.save(story);
+  const last = story.chapters[story.chapters.length - 1];
+  sendJson(res, 200, {
+    chapters: story.chapters.length,
+    last: last ? { text: last.text, title: last.title } : null
+  });
 }
 
 function handleStoryDelete(req, res, id) {
@@ -521,6 +536,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const route = routes[`${req.method} ${pathname}`];
     if (route) return await route(req, res);
+    if (req.method === 'DELETE' && pathname.endsWith('/ultimo-capitulo')) return handleChapterDelete(req, res, pathname.slice('/api/stories/'.length, -'/ultimo-capitulo'.length));
     if (req.method === 'DELETE' && pathname.startsWith('/api/stories/')) return handleStoryDelete(req, res, pathname.slice('/api/stories/'.length));
     if (req.method !== 'GET') return sendJson(res, 405, { error: 'Método no permitido.' });
     if (pathname.startsWith('/api/jobs/')) return handleJob(req, res, pathname.slice('/api/jobs/'.length));

@@ -1121,8 +1121,46 @@
 
       const scene = el('button', { type: 'button', text: 'Prompt de imagen' });
       scene.addEventListener('click', () => buildScenePrompt(item, scene));
-      actions.append(scene, el('span', { class: 'saved', text: item.notice || 'Guardada en creaciones' }));
+      actions.append(scene);
+
+      if (item.storyId && item.chapter) {
+        const redo = el('button', { type: 'button', text: 'Rehacer este capítulo' });
+        redo.addEventListener('click', () => removeChapter(item, redo));
+        actions.append(redo);
+      }
+
+      actions.append(el('span', { class: 'saved', text: item.notice || 'Guardada en creaciones' }));
       return actions;
+    }
+
+    async function removeChapter(item, button) {
+      if (!confirm(`¿Borrar el capítulo ${item.chapter} para volver a escribirlo? No se puede deshacer.`)) return;
+      button.disabled = true;
+      button.textContent = 'Borrando…';
+      try {
+        const response = await fetch(`/api/stories/${item.storyId}/ultimo-capitulo`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        state.history = state.history.filter(entry => entry !== item);
+        if (data.last) {
+          const previous = { type: 'story', text: data.last.text, title: data.last.title, storyId: item.storyId, chapter: data.chapters };
+          state.history.unshift(previous);
+          showItem(previous);
+        } else {
+          state.current = null;
+          sheet.replaceChildren(el('div', { class: 'empty' }, [
+            el('h2', { text: 'Historia vacía' }),
+            el('p', { text: 'Borraste su único capítulo. Escribe el primero desde el formulario.' })
+          ]));
+          renderHistory();
+        }
+        await loadStories();
+      } catch (error) {
+        showNotice(error.message || 'No se pudo borrar el capítulo.');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Rehacer este capítulo';
+      }
     }
 
     function continuePanel(item) {
@@ -1513,7 +1551,8 @@
       const status = modeStatus();
       if (status && !status.ready) return;
       const prompt = promptInput.value.trim();
-      if (!prompt && !state.image) {
+      const continuing = state.mode === 'story' && Boolean(state.storyId);
+      if (!prompt && !state.image && !continuing) {
         promptInput.focus();
         return;
       }

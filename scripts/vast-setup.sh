@@ -17,10 +17,10 @@ step "Comprobando ComfyUI"
 
 step "Instalando herramientas del sistema"
 missing=()
-for tool in git curl xz zstd; do command -v "$tool" >/dev/null || missing+=("$tool")
+for tool in git curl xz zstd lspci; do command -v "$tool" >/dev/null || missing+=("$tool")
 done
 if [ ${#missing[@]} -gt 0 ]; then
-  packages=$(printf '%s\n' "${missing[@]}" | sed 's/^xz$/xz-utils/' | tr '\n' ' ')
+  packages=$(printf '%s\n' "${missing[@]}" | sed -e 's/^xz$/xz-utils/' -e 's/^lspci$/pciutils/' | tr '\n' ' ')
   apt-get update -qq && apt-get install -y -qq $packages >/dev/null
 fi
 

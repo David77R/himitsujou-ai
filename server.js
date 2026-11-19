@@ -317,7 +317,7 @@ function authorized(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Basic ')) return false;
   const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
-  const supplied = decoded.slice(decoded.indexOf(':') + 1);
+  const supplied = decoded.slice(decoded.indexOf(':') + 1).trim();
   const digest = value => crypto.createHash('sha256').update(value).digest();
   return crypto.timingSafeEqual(digest(supplied), digest(config.password));
 }

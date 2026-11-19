@@ -76,9 +76,10 @@ if [ -f "$env_file" ] && grep -q '^APP_PASSWORD=.\+' "$env_file"; then
   password_line=$(grep '^APP_PASSWORD=' "$env_file")
 else
   while true; do
-    read -rsp "Escribe la contraseña que usarás para entrar al Estudio: " password </dev/tty; echo
-    [ ${#password} -ge 8 ] && break
-    echo "Usa al menos 8 caracteres."
+    read -rp "Contraseña para entrar al Estudio (solo letras y números, mínimo 8): " password </dev/tty
+    password="${password//[[:space:]]/}"
+    [[ "$password" =~ ^[A-Za-z0-9]{8,}$ ]] && break
+    echo "Usa solo letras y números, sin espacios, y al menos 8 caracteres."
   done
   password_line="APP_PASSWORD=$password"
 fi

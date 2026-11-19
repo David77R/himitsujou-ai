@@ -385,10 +385,10 @@ async function handleStatus(req, res) {
   sendJson(res, 200, { story, image, video });
 }
 
-function streamFile(req, res, file, type) {
+function streamFile(req, res, file, type, cache) {
   fs.stat(file, (error, stat) => {
     if (error || !stat.isFile()) return sendJson(res, 404, { error: 'No encontrado.' });
-    const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes' };
+    const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': cache || 'no-cache' };
     const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (!range) {
       res.writeHead(200, { ...headers, 'Content-Length': stat.size });
@@ -416,7 +416,8 @@ function serveStatic(req, res, pathname) {
   const file = path.resolve(PUBLIC_DIR, relative);
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return sendJson(res, 404, { error: 'No encontrado.' });
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
-  streamFile(req, res, file, types[path.extname(file)] || MIME_BY_EXT[path.extname(file)] || 'application/octet-stream');
+  const cache = relative.startsWith('vendor/') ? 'public, max-age=604800, immutable' : 'no-cache';
+  streamFile(req, res, file, types[path.extname(file)] || MIME_BY_EXT[path.extname(file)] || 'application/octet-stream', cache);
 }
 
 function authorized(req) {

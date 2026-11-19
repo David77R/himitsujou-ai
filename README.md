@@ -24,7 +24,7 @@ Todo lo generado se guarda en la carpeta indicada por `OUTPUT_DIR`.
 2. Abre la **Jupyter Terminal** desde el Instance Portal y ejecuta:
 
    ```
-   bash <(curl -fsSL https://raw.githubusercontent.com/David77R/himitsujou-ai/main/scripts/vast-setup.sh)
+   curl -fsSL -o setup.sh https://raw.githubusercontent.com/David77R/himitsujou-ai/main/scripts/vast-setup.sh && bash setup.sh
    ```
 
 3. Elige la contraseña cuando te la pida y abre el enlace que aparece al final.
